@@ -53,7 +53,7 @@ func (c *Client) consumeEvents(ctx context.Context) error {
 				return ErrResponse
 			}
 			switch event.Type {
-			case "invitation_created", "invitation_closed", "game_started", "game_cancelled":
+			case "invitation_created", "invitation_closed", "game_started", "game_cancelled", "mobius_move", "game_finished":
 			default:
 				return ErrResponse
 			}
@@ -68,6 +68,11 @@ func (c *Client) consumeEvents(ctx context.Context) error {
 		}
 		var notice string
 		for _, event := range batch.Items {
+			if event.Type == "mobius_move" {
+				if err := c.verifyMoveEvent(ctx, event, state); err != nil {
+					return err
+				}
+			}
 			text, err := eventNotice(event, state)
 			if err != nil {
 				return err
@@ -117,7 +122,7 @@ func eventNotice(event protocol.Event, state protocol.State) (string, error) {
 		default:
 			return "", ErrResponse
 		}
-		if state.Invitation == nil && state.Game == nil {
+		if state.Invitation == nil && (state.Game == nil || state.Game.Status == "completed") {
 			switch invitation.Status {
 			case "declined":
 				return "Приглашение отклонено.", nil
@@ -132,6 +137,12 @@ func eventNotice(event protocol.Event, state protocol.State) (string, error) {
 		if json.Unmarshal(event.Payload, &game) != nil || !protocol.IsUUID(game.ID) {
 			return "", ErrResponse
 		}
+	case "game_finished":
+		var game protocol.Game
+		if json.Unmarshal(event.Payload, &game) != nil || !protocol.IsUUID(game.ID) || game.LokiID != state.Loki.ID || game.Status != "completed" ||
+			(game.Result != "loki_win" && game.Result != "mobius_win" && game.Result != "draw") {
+			return "", ErrResponse
+		}
 	case "game_cancelled":
 		var payload struct {
 			GameID string `json:"game_id"`
@@ -139,9 +150,36 @@ func eventNotice(event protocol.Event, state protocol.State) (string, error) {
 		if json.Unmarshal(event.Payload, &payload) != nil || !protocol.IsUUID(payload.GameID) {
 			return "", ErrResponse
 		}
-		if state.Game == nil {
+		if state.Game == nil || state.Game.Status == "completed" {
 			return "Незаконченная партия удалена и не учтена в статистике.", nil
 		}
 	}
 	return "", nil
+}
+
+func (c *Client) verifyMoveEvent(ctx context.Context, event protocol.Event, state protocol.State) error {
+	var payload protocol.MoveEvent
+	if json.Unmarshal(event.Payload, &payload) != nil || !protocol.IsUUID(payload.Game.ID) || payload.Game.LokiID != state.Loki.ID ||
+		!protocol.IsUUID(payload.Move.ID) || !protocol.IsUUID(payload.Move.RequestID) || payload.Move.Actor != "mobius" || payload.Move.Number < 1 || payload.Move.Number > 9 {
+		return ErrResponse
+	}
+	current := state.Game
+	if current == nil || current.ID != payload.Game.ID {
+		var previous protocol.Game
+		if err := c.request(ctx, http.MethodGet, "/api/v1/loki/games/"+payload.Game.ID, nil, &previous); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return nil
+			}
+			return err
+		}
+		current = &previous
+	}
+	if current.LokiID != state.Loki.ID || len(current.Moves) < payload.Move.Number {
+		return ErrResponse
+	}
+	move := current.Moves[payload.Move.Number-1]
+	if move.ID != payload.Move.ID || move.RequestID != payload.Move.RequestID || move.Actor != "mobius" || move.Number != payload.Move.Number || move.Side != payload.Move.Side || move.Row != payload.Move.Row || move.Column != payload.Move.Column {
+		return ErrResponse
+	}
+	return nil
 }

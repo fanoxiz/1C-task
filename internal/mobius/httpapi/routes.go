@@ -9,9 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"onec/internal/game"
 	"onec/internal/httpjson"
 	"onec/internal/mobius/postgres"
 	"onec/internal/mobius/service"
+	"onec/internal/protocol"
 	"onec/web"
 )
 
@@ -22,6 +24,7 @@ func Mobius(ready Readiness, identities *service.Identity) http.Handler {
 	healthRoutes(mux, ready)
 	mux.Handle("GET /{$}", web.Handler("mobius"))
 	mux.Handle("GET /app.js", web.Handler("mobius"))
+	mux.Handle("GET /game.js", web.Handler("common"))
 	mux.HandleFunc("GET /api/v1/mobius/loki", func(w http.ResponseWriter, r *http.Request) {
 		online := r.URL.Query().Get("connected")
 		if online != "" && online != "true" && online != "false" {
@@ -58,6 +61,19 @@ func Mobius(ready Readiness, identities *service.Identity) http.Handler {
 		}
 		httpjson.Write(w, http.StatusOK, map[string]any{"items": items})
 	})
+	mux.HandleFunc("GET /api/v1/mobius/games", func(w http.ResponseWriter, r *http.Request) {
+		if status := r.URL.Query().Get("status"); status != "" && status != "active" {
+			identityError(w, service.ErrInvalidRequest)
+			return
+		}
+		items, err := identities.ActiveGames(r.Context(), r.URL.Query().Get("cursor"))
+		if err != nil {
+			identityError(w, err)
+			return
+		}
+		httpjson.Write(w, http.StatusOK, items)
+	})
+	gameRoutes(mux, "/api/v1/mobius/games", identities, false)
 	return httpjson.Local(httpjson.Timeout(mux))
 }
 
@@ -159,7 +175,45 @@ func Loki(ready Readiness, identities *service.Identity) http.Handler {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
+	gameRoutes(mux, "/api/v1/loki/games", identities, true)
 	return httpjson.Timeout(mux)
+}
+
+func gameRoutes(mux *http.ServeMux, prefix string, identities *service.Identity, authenticate bool) {
+	tokenFor := func(w http.ResponseWriter, r *http.Request) (string, bool) {
+		if authenticate {
+			return bearer(w, r)
+		}
+		return "", true
+	}
+	mux.HandleFunc("GET "+prefix+"/{id}", func(w http.ResponseWriter, r *http.Request) {
+		token, ok := tokenFor(w, r)
+		if !ok {
+			return
+		}
+		result, err := identities.ReadGame(r.Context(), token, r.PathValue("id"))
+		if err != nil {
+			identityError(w, err)
+			return
+		}
+		httpjson.Write(w, http.StatusOK, result)
+	})
+	mux.HandleFunc("POST "+prefix+"/{id}/moves", func(w http.ResponseWriter, r *http.Request) {
+		token, ok := tokenFor(w, r)
+		if !ok {
+			return
+		}
+		var request protocol.MoveRequest
+		if !httpjson.Decode(w, r, &request) {
+			return
+		}
+		result, err := identities.Play(r.Context(), token, r.PathValue("id"), request)
+		if err != nil {
+			identityError(w, err)
+			return
+		}
+		httpjson.Write(w, http.StatusOK, result)
+	})
 }
 
 func bearer(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -173,6 +227,14 @@ func bearer(w http.ResponseWriter, r *http.Request) (string, bool) {
 
 func identityError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, game.ErrWrongTurn):
+		httpjson.Error(w, 409, "wrong_turn", "It is the other player's turn")
+	case errors.Is(err, game.ErrCellOccupied):
+		httpjson.Error(w, 409, "cell_occupied", "Cell is occupied")
+	case errors.Is(err, game.ErrFinished):
+		httpjson.Error(w, 409, "game_finished", "Game is finished")
+	case errors.Is(err, postgres.ErrStaleMove):
+		httpjson.Error(w, 409, "stale_move", "Move number changed; synchronize game state")
 	case errors.Is(err, service.ErrInvalidRequest):
 		httpjson.Error(w, 400, "invalid_request", "Invalid identifier, side, decision or limit")
 	case errors.Is(err, postgres.ErrNotFound):

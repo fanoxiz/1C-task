@@ -32,6 +32,23 @@
     <p id="active-game"></p>
     <p id="invite-error" role="alert"></p>
   </section>
-  <script src="/app.js" defer></script>
+  <h2>Незаконченные партии</h2>
+  <ul id="active-games"></ul>
+  <button id="games-first" type="button">В начало партий</button>
+  <button id="games-next" type="button" disabled>Следующая страница партий</button>
+  <section id="game-panel" hidden>
+    <h2>Партия</h2>
+    <p>ID: <code data-game-id></code></p>
+    <p data-sides></p>
+    <p data-turn></p>
+    <p data-result role="status"></p>
+    <div data-board aria-label="Игровое поле" style="display: grid; grid-template-columns: repeat(3, 5rem); gap: .25rem;"></div>
+    <h3>Ходы</h3>
+    <ol data-moves style="list-style: none; padding: 0;"></ol>
+    <button data-retry type="button" hidden>Повторить отправку хода</button>
+    <p data-error role="alert"></p>
+  </section>
+  <style>[data-board] button { min-height: 5rem; font-size: 2rem; } [data-board] button:disabled { color: #333; }</style>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>

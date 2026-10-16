@@ -30,14 +30,18 @@ func scanInvitation(row pgx.Row) (protocol.Invitation, error) {
 }
 
 func emit(ctx context.Context, tx pgx.Tx, owner, kind string, invitationID, gameID *string, payload any) error {
+	return emitWithMove(ctx, tx, owner, kind, invitationID, gameID, nil, payload)
+}
+
+func emitWithMove(ctx context.Context, tx pgx.Tx, owner, kind string, invitationID, gameID, moveID *string, payload any) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
 	_, err = tx.Exec(ctx, `WITH counter AS (
 		UPDATE game.loki SET event_sequence = event_sequence + 1 WHERE id = $1 RETURNING event_sequence
-	) INSERT INTO game.events (loki_id, sequence, type, invitation_id, game_id, payload)
-		SELECT $1, event_sequence, $2, $3, $4, $5 FROM counter`, owner, kind, invitationID, gameID, data)
+	) INSERT INTO game.events (loki_id, sequence, type, invitation_id, game_id, move_id, payload)
+		SELECT $1, event_sequence, $2, $3, $4, $5, $6 FROM counter`, owner, kind, invitationID, gameID, moveID, data)
 	return err
 }
 
@@ -78,12 +82,16 @@ func disconnectActivity(ctx context.Context, tx pgx.Tx, owner string, now time.T
 }
 
 func snapshot(ctx context.Context, tx pgx.Tx, state *protocol.State) error {
+	var gameID *string
 	err := tx.QueryRow(ctx, `SELECT
 		(SELECT to_jsonb(i) FROM game.invitations i WHERE loki_id = $1 AND status = 'pending'),
-		(SELECT to_jsonb(g) FROM game.games g WHERE loki_id = $1 AND status = 'active')`, state.Loki.ID).
-		Scan(&state.Invitation, &state.Game)
-	if err == nil && state.Game != nil {
-		fillSides(state.Game)
+		(SELECT id::text FROM game.games WHERE loki_id = $1
+		 ORDER BY (status='active') DESC, finished_at DESC NULLS LAST, id DESC LIMIT 1)`, state.Loki.ID).
+		Scan(&state.Invitation, &gameID)
+	if err == nil && gameID != nil {
+		var game protocol.Game
+		game, _, err = loadGame(ctx, tx, *gameID, state.Loki.ID)
+		state.Game = &game
 	}
 	return err
 }
@@ -92,6 +100,20 @@ func fillSides(game *protocol.GameSummary) {
 	game.LokiSide, game.NextActor = "O", "mobius"
 	if game.MobiusSide == "O" {
 		game.LokiSide, game.NextActor = "X", "loki"
+	}
+}
+
+func fillTurn(game *protocol.GameSummary, count int) {
+	fillSides(game)
+	if count%2 == 1 {
+		if game.NextActor == "mobius" {
+			game.NextActor = "loki"
+		} else {
+			game.NextActor = "mobius"
+		}
+	}
+	if game.Status == "completed" {
+		game.NextActor = ""
 	}
 }
 
@@ -224,7 +246,7 @@ func (s *IdentityStore) Respond(ctx context.Context, hash []byte, invitationID, 
 			return err
 		}
 		if result.GameID != nil {
-			game := protocol.GameSummary{ID: *result.GameID, MobiusSide: result.MobiusSide, Status: "active"}
+			game := protocol.GameSummary{ID: *result.GameID, LokiID: state.Loki.ID, MobiusSide: result.MobiusSide, Status: "active"}
 			fillSides(&game)
 			return emit(ctx, tx, state.Loki.ID, "game_started", &result.ID, result.GameID, game)
 		}

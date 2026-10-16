@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"onec/internal/game"
 	"onec/internal/protocol"
 )
 
@@ -117,7 +118,8 @@ func (s *IdentityStore) withLoki(ctx context.Context, column string, key any, ac
 
 func businessError(err error) bool {
 	return errors.Is(err, ErrReconnect) || errors.Is(err, ErrNotFound) || errors.Is(err, ErrExpired) ||
-		errors.Is(err, ErrConflict) || errors.Is(err, ErrBusy) || errors.Is(err, ErrOffline)
+		errors.Is(err, ErrConflict) || errors.Is(err, ErrBusy) || errors.Is(err, ErrOffline) || errors.Is(err, ErrStaleMove) ||
+		errors.Is(err, game.ErrWrongTurn) || errors.Is(err, game.ErrCellOccupied) || errors.Is(err, game.ErrFinished) || errors.Is(err, game.ErrOutOfBounds)
 }
 
 func (s *IdentityStore) ResetPresence(ctx context.Context) error {
@@ -181,7 +183,8 @@ func (s *IdentityStore) List(ctx context.Context, cursor string, onlineOnly bool
 		}
 	}
 	rows, err := s.pool.Query(ctx, `SELECT l.id::text, l.display_name,
-		l.connected AND l.last_seen_at > clock_timestamp() - interval '30 seconds', l.created_at, l.last_seen_at, to_jsonb(i), to_jsonb(g)
+		l.connected AND l.last_seen_at > clock_timestamp() - interval '30 seconds', l.created_at, l.last_seen_at, to_jsonb(i), to_jsonb(g),
+		(SELECT count(*) FROM game.moves m WHERE m.game_id=g.id)
 		FROM game.loki l
 		LEFT JOIN LATERAL (SELECT * FROM game.invitations WHERE loki_id = l.id ORDER BY created_at DESC, id DESC LIMIT 1) i ON true
 		LEFT JOIN game.games g ON g.loki_id = l.id AND g.status = 'active'
@@ -194,11 +197,12 @@ func (s *IdentityStore) List(ctx context.Context, cursor string, onlineOnly bool
 	defer rows.Close()
 	for rows.Next() {
 		var item protocol.LokiStatus
-		if err := rows.Scan(&item.ID, &item.DisplayName, &item.Connected, &item.CreatedAt, &item.LastSeenAt, &item.Invitation, &item.Game); err != nil {
+		var count int
+		if err := rows.Scan(&item.ID, &item.DisplayName, &item.Connected, &item.CreatedAt, &item.LastSeenAt, &item.Invitation, &item.Game, &count); err != nil {
 			return result, err
 		}
 		if item.Game != nil {
-			fillSides(item.Game)
+			fillTurn(item.Game, count)
 		}
 		result.Items = append(result.Items, item)
 	}

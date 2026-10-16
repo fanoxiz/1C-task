@@ -391,7 +391,7 @@ func TestInvitationStatisticsSnapshotAndRestart(t *testing.T) {
 		t.Fatal("restart lost cancellation notification")
 	}
 	jsonRequest(t, "POST", f.public.URL+"/api/v1/loki/connect", a.Token, nil, 200)
-	if f.state(a.Token).Loki.ID != a.State.Loki.ID || f.state(a.Token).Game != nil {
+	if restored := f.state(a.Token); restored.Loki.ID != a.State.Loki.ID || restored.Game == nil || restored.Game.Status != "completed" {
 		t.Fatal("restart lost identity or revived game")
 	}
 }

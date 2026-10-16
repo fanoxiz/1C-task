@@ -1,10 +1,12 @@
 package httpui
 
 import (
+	"errors"
 	"net/http"
 
 	"onec/internal/httpjson"
 	"onec/internal/loki/client"
+	"onec/internal/protocol"
 	"onec/web"
 )
 
@@ -12,6 +14,7 @@ func Handler(connection *client.Client) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /{$}", web.Handler("loki"))
 	mux.Handle("GET /app.js", web.Handler("loki"))
+	mux.Handle("GET /game.js", web.Handler("common"))
 	mux.HandleFunc("GET /api/v1/state", func(w http.ResponseWriter, r *http.Request) {
 		httpjson.Write(w, http.StatusOK, connection.State())
 	})
@@ -53,6 +56,24 @@ func Handler(connection *client.Client) http.Handler {
 				status = http.StatusBadRequest
 			}
 			httpjson.Error(w, status, "response_failed", err.Error())
+			return
+		}
+		httpjson.Write(w, http.StatusOK, connection.State())
+	})
+	mux.HandleFunc("POST /api/v1/games/{id}/moves", func(w http.ResponseWriter, r *http.Request) {
+		var request protocol.MoveRequest
+		if !httpjson.Decode(w, r, &request) {
+			return
+		}
+		if err := connection.Play(r.Context(), r.PathValue("id"), request); err != nil {
+			status := http.StatusConflict
+			if client.IsInputError(err) {
+				status = http.StatusBadRequest
+			}
+			if errors.Is(err, client.ErrUnavailable) || errors.Is(err, client.ErrResponse) || errors.Is(err, client.ErrToken) {
+				status = http.StatusBadGateway
+			}
+			httpjson.Error(w, status, "move_failed", err.Error())
 			return
 		}
 		httpjson.Write(w, http.StatusOK, connection.State())

@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-//go:embed mobius loki
+//go:embed mobius loki common
 var assets embed.FS
 
 func Handler(app string) http.Handler {

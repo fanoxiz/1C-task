@@ -1,3 +1,5 @@
+import { GamePanel, moveBody, moveResponse } from '/game.js';
+
 const form = document.querySelector('#connection');
 const serverInput = document.querySelector('#server');
 const nameInput = document.querySelector('#name');
@@ -12,6 +14,21 @@ let actionError = '';
 let version = 0;
 let currentState = null;
 let invitationDeadline = 0;
+const gamePanel = new GamePanel(document.querySelector('#game'), 'loki', async (draft) => {
+  pending = true;
+  version += 1;
+  connectButton.disabled = disconnectButton.disabled = true;
+  try {
+    const response = await fetch(`/api/v1/games/${draft.gameId}/moves`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(moveBody(draft)), signal: AbortSignal.timeout(9000) });
+    const state = await moveResponse(response);
+    render(state);
+    return state.game;
+  } finally {
+    pending = false;
+    version += 1;
+    connectButton.disabled = disconnectButton.disabled = false;
+  }
+}, refresh);
 
 function countdown() {
   const seconds = Math.max(0, Math.ceil((invitationDeadline - Date.now()) / 1000));
@@ -42,12 +59,7 @@ function render(state) {
     document.querySelector('#invitation-side').textContent = `Мобиус играет ${invitation.mobius_side}. Вы играете ${invitation.mobius_side === 'X' ? 'O' : 'X'}.`;
     document.querySelector('#statistics').textContent = invitation.statistics_snapshot.message;
   }
-  document.querySelector('#game').hidden = !state.game;
-  if (state.game) {
-    document.querySelector('#game-id').textContent = state.game.id;
-    document.querySelector('#game-side').textContent = `Вы играете ${state.game.loki_side}, Мобиус — ${state.game.mobius_side}.`;
-    document.querySelector('#first-player').textContent = `Первым ходит ${state.game.next_actor === 'mobius' ? 'Мобиус' : 'Локи'}.`;
-  }
+  gamePanel.render(state.game, state.status === 'connected');
   countdown();
 }
 

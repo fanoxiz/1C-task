@@ -11,10 +11,10 @@ type Loki struct {
 }
 
 type State struct {
-	Loki       Loki         `json:"loki"`
-	ServerTime time.Time    `json:"server_time"`
-	Invitation *Invitation  `json:"invitation"`
-	Game       *GameSummary `json:"game"`
+	Loki       Loki        `json:"loki"`
+	ServerTime time.Time   `json:"server_time"`
+	Invitation *Invitation `json:"invitation"`
+	Game       *Game       `json:"game"`
 }
 
 type Registration struct {

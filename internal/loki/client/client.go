@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -23,22 +24,27 @@ var (
 	ErrStorage      = errors.New("не удалось сохранить профиль клиента")
 	ErrName         = errors.New("укажите имя для первой регистрации")
 	ErrExpired      = errors.New("срок приглашения истёк")
-	ErrConflict     = errors.New("приглашение уже закрыто другим решением")
+	ErrConflict     = errors.New("запрос противоречит ранее выполненному действию")
 	ErrNotFound     = errors.New("объект уже удалён или недоступен")
 	ErrDecision     = errors.New("укажите корректное приглашение и решение accept или decline")
 	ErrNotConnected = errors.New("сначала подключитесь к серверу")
+	ErrMoveRequest  = errors.New("некорректные параметры хода")
+	ErrTurn         = errors.New("сейчас ход соперника")
+	ErrCell         = errors.New("клетка уже занята")
+	ErrFinished     = errors.New("партия уже завершена")
+	ErrStaleMove    = errors.New("состояние партии изменилось; дождитесь обновления")
 )
 
 type View struct {
-	ServerAddress string                `json:"server_address"`
-	Status        string                `json:"status"`
-	Error         string                `json:"error,omitempty"`
-	Identity      *protocol.Loki        `json:"identity,omitempty"`
-	Invitation    *protocol.Invitation  `json:"invitation"`
-	Game          *protocol.GameSummary `json:"game"`
-	ServerTime    time.Time             `json:"server_time"`
-	ObservedAt    time.Time             `json:"observed_at"`
-	Notice        string                `json:"notice,omitempty"`
+	ServerAddress string               `json:"server_address"`
+	Status        string               `json:"status"`
+	Error         string               `json:"error,omitempty"`
+	Identity      *protocol.Loki       `json:"identity,omitempty"`
+	Invitation    *protocol.Invitation `json:"invitation"`
+	Game          *protocol.Game       `json:"game"`
+	ServerTime    time.Time            `json:"server_time"`
+	ObservedAt    time.Time            `json:"observed_at"`
+	Notice        string               `json:"notice,omitempty"`
 }
 
 type Client struct {
@@ -79,6 +85,7 @@ func (c *Client) State() View {
 	}
 	if v.Game != nil {
 		game := *v.Game
+		game.Moves = slices.Clone(v.Game.Moves)
 		v.Game = &game
 	}
 	return v
@@ -307,8 +314,19 @@ func (c *Client) request(ctx context.Context, method, path string, body, result 
 	}
 	if response.StatusCode == http.StatusConflict {
 		var failure protocol.ErrorResponse
-		if json.NewDecoder(io.LimitReader(response.Body, 32<<10)).Decode(&failure) == nil && failure.Error.Code == "reconnect_required" {
-			return errReconnect
+		if json.NewDecoder(io.LimitReader(response.Body, 32<<10)).Decode(&failure) == nil {
+			switch failure.Error.Code {
+			case "reconnect_required":
+				return errReconnect
+			case "wrong_turn":
+				return ErrTurn
+			case "cell_occupied":
+				return ErrCell
+			case "game_finished":
+				return ErrFinished
+			case "stale_move":
+				return ErrStaleMove
+			}
 		}
 		return ErrConflict
 	}
@@ -333,5 +351,5 @@ func (c *Client) request(ctx context.Context, method, path string, body, result 
 }
 
 func IsInputError(err error) bool {
-	return errors.Is(err, ErrName) || errors.Is(err, profile.ErrAddress) || errors.Is(err, ErrDecision)
+	return errors.Is(err, ErrName) || errors.Is(err, profile.ErrAddress) || errors.Is(err, ErrDecision) || errors.Is(err, ErrMoveRequest)
 }
