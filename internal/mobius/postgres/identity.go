@@ -113,6 +113,10 @@ func (s *IdentityStore) withLoki(ctx context.Context, column string, key any, ac
 		return state, err
 	}
 	// Lifecycle cleanup must survive a rejected late response or poll.
+	// A request may have waited on a row after passing the HTTP ownership guard.
+	if err := s.CheckServer(ctx); err != nil {
+		return state, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return state, err
 	}
@@ -149,6 +153,9 @@ func (s *IdentityStore) ResetPresence(ctx context.Context) error {
 		}
 	}
 	if _, err := tx.Exec(ctx, "UPDATE game.loki SET connected = false WHERE connected"); err != nil {
+		return err
+	}
+	if err := s.CheckServer(ctx); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

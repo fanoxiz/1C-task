@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"slices"
 	"strings"
@@ -347,6 +348,10 @@ func (c *Client) request(ctx context.Context, method, path string, body, result 
 	}
 	if result != nil {
 		if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(result); err != nil {
+			var networkError net.Error
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.As(err, &networkError) || ctx.Err() != nil {
+				return ErrUnavailable
+			}
 			return ErrResponse
 		}
 	}

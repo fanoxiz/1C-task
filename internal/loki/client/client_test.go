@@ -237,3 +237,34 @@ func TestFailedServerSwitchDoesNotResumePreviousServer(t *testing.T) {
 		t.Fatal("switch lost the previous saved identity")
 	}
 }
+
+func TestTruncatedPollResponsesRecoverWithoutRegisteringAgain(t *testing.T) {
+	for _, path := range []string{"/api/v1/loki/state", "/api/v1/loki/events"} {
+		t.Run(path, func(t *testing.T) {
+			f, _ := newFake(t, 'a')
+			var truncate atomic.Bool
+			remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == path && truncate.CompareAndSwap(true, false) {
+					w.Header().Set("Content-Length", "1000")
+					_, _ = w.Write([]byte(`{"items":[`))
+					return
+				}
+				f.handle(w, r)
+			}))
+			defer remote.Close()
+			c := New(openStore(t, t.TempDir()))
+			if err := c.Connect(context.Background(), remote.URL, "Loki"); err != nil {
+				t.Fatal(err)
+			}
+			truncate.Store(true)
+			c.poll(context.Background())
+			if c.State().Status != "error" || !c.enabled {
+				t.Fatal("incomplete transport response permanently disabled polling")
+			}
+			c.poll(context.Background())
+			if c.State().Status != "connected" || f.registered.Load() != 1 || c.State().Identity.ID != f.id {
+				t.Fatal("polling did not recover with the saved identity")
+			}
+		})
+	}
+}

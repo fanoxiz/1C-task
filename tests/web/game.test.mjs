@@ -15,14 +15,13 @@ class Element {
   click() { if (!this.disabled) this.listeners.click?.(); }
 }
 
-function setup() {
+function setup(storage = new Map()) {
   const elements = new Map();
   const root = new Element();
   root.querySelector = selector => {
     if (!elements.has(selector)) elements.set(selector, new Element());
     return elements.get(selector);
   };
-  const storage = new Map();
   globalThis.document = { createElement: () => new Element() };
   globalThis.sessionStorage = {
     getItem: key => storage.get(key),
@@ -108,4 +107,37 @@ test('completion of A does not unlock the still pending B', async () => {
   requests[1].resolve(applied(requests[1]));
   await settled();
   assert.equal(panel.cells[4].textContent, 'X');
+});
+
+test('reload after a lost move response retries the persisted request once', async () => {
+  const first = setup();
+  first.panel.render(board('A'), true);
+  first.panel.cells[0].click();
+  const original = first.requests[0];
+  original.reject(new Error('connection closed after commit'));
+  await settled();
+  const reloaded = setup(first.storage);
+  reloaded.panel.render(board('A'), true);
+  reloaded.root.querySelector('[data-retry]').click();
+  assert.equal(reloaded.requests.length, 1);
+  assert.deepEqual(reloaded.requests[0].draft, original.draft);
+  reloaded.requests[0].resolve(applied(original));
+  await settled();
+  assert.equal(reloaded.panel.game.moves.length, 1);
+  assert.deepEqual(JSON.parse(first.storage.get('onec.mobius.moves')), {});
+});
+
+test('fresh snapshot after a lost response clears the draft without resending', async () => {
+  const first = setup();
+  first.panel.render(board('A'), true);
+  first.panel.cells[0].click();
+  const original = first.requests[0];
+  first.panel.render(applied(original), true);
+  original.reject(new Error('response lost'));
+  await settled();
+  const reloaded = setup(first.storage);
+  reloaded.panel.render(applied(original), true);
+  assert.equal(reloaded.root.querySelector('[data-retry]').hidden, true);
+  assert.equal(reloaded.root.querySelector('[data-error]').textContent, '');
+  assert.equal(reloaded.requests.length, 0);
 });
