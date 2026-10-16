@@ -10,8 +10,19 @@ let loading = false;
 let initialized = false;
 let actionError = '';
 let version = 0;
+let currentState = null;
+let invitationDeadline = 0;
+
+function countdown() {
+  const seconds = Math.max(0, Math.ceil((invitationDeadline - Date.now()) / 1000));
+  document.querySelector('#invitation-timer').textContent = `${seconds} сек.`;
+  const disabled = pending || currentState?.status !== 'connected' || seconds === 0;
+  document.querySelector('#accept').disabled = document.querySelector('#decline').disabled = disabled;
+}
 
 function render(state) {
+  if (state.invitation && state.invitation.id !== currentState?.invitation?.id) actionError = '';
+  currentState = state;
   const labels = { disconnected: 'Отключён', connecting: 'Подключаемся…', connected: 'Подключён', error: 'Ошибка подключения' };
   statusLine.textContent = labels[state.status] || 'Состояние неизвестно';
   errorLine.textContent = state.error || actionError;
@@ -22,6 +33,22 @@ function render(state) {
   document.querySelector('#identity').hidden = !state.identity;
   document.querySelector('#display-name').textContent = state.identity?.display_name || '';
   document.querySelector('#loki-id').textContent = state.identity?.id || '';
+  const invitation = state.invitation;
+  document.querySelector('#notice').textContent = state.notice || '';
+  document.querySelector('#invitation').hidden = !invitation;
+  if (invitation) {
+    invitationDeadline = Date.now() + Date.parse(invitation.expires_at) - Date.parse(state.server_time)
+      - Math.max(0, Date.now() - Date.parse(state.observed_at));
+    document.querySelector('#invitation-side').textContent = `Мобиус играет ${invitation.mobius_side}. Вы играете ${invitation.mobius_side === 'X' ? 'O' : 'X'}.`;
+    document.querySelector('#statistics').textContent = invitation.statistics_snapshot.message;
+  }
+  document.querySelector('#game').hidden = !state.game;
+  if (state.game) {
+    document.querySelector('#game-id').textContent = state.game.id;
+    document.querySelector('#game-side').textContent = `Вы играете ${state.game.loki_side}, Мобиус — ${state.game.mobius_side}.`;
+    document.querySelector('#first-player').textContent = `Первым ходит ${state.game.next_actor === 'mobius' ? 'Мобиус' : 'Локи'}.`;
+  }
+  countdown();
 }
 
 async function refresh() {
@@ -34,7 +61,7 @@ async function refresh() {
     const state = await response.json();
     if (requestVersion === version && !pending) render(state);
   } catch {
-    statusLine.textContent = 'Нет связи с приложением Локи';
+    if (requestVersion === version && !pending) statusLine.textContent = 'Нет связи с приложением Локи';
   } finally {
     loading = false;
   }
@@ -71,5 +98,34 @@ form.addEventListener('submit', (event) => {
   change('POST', { server_address: serverInput.value, display_name: nameInput.value });
 });
 disconnectButton.addEventListener('click', () => change('DELETE'));
+async function respond(decision) {
+  if (pending || !currentState?.invitation || document.querySelector('#accept').disabled) return;
+  const id = currentState.invitation.id;
+  pending = true;
+  connectButton.disabled = disconnectButton.disabled = true;
+  version += 1;
+  actionError = '';
+  countdown();
+  try {
+    const response = await fetch(`/api/v1/invitations/${id}/response`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision }), signal: AbortSignal.timeout(9000),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error?.message || 'Не удалось ответить на приглашение.');
+    render(result);
+  } catch (error) {
+    actionError = error.message || 'Не удалось ответить на приглашение.';
+    errorLine.textContent = actionError;
+  } finally {
+    pending = false;
+    connectButton.disabled = disconnectButton.disabled = false;
+    countdown();
+    refresh();
+  }
+}
+document.querySelector('#accept').addEventListener('click', () => respond('accept'));
+document.querySelector('#decline').addEventListener('click', () => respond('decline'));
 refresh();
 setInterval(refresh, 1000);
+setInterval(countdown, 200);

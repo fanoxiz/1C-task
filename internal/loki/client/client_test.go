@@ -86,6 +86,8 @@ func (f *fakeServer) handle(w http.ResponseWriter, r *http.Request) {
 	case "/api/v1/loki/disconnect":
 		f.connected.Store(false)
 		w.WriteHeader(204)
+	case "/api/v1/loki/events":
+		httpjson.Write(w, 200, protocol.EventBatch{Items: []protocol.Event{}})
 	default:
 		http.NotFound(w, r)
 	}

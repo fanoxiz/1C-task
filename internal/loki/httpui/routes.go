@@ -40,6 +40,23 @@ func Handler(connection *client.Client) http.Handler {
 		}
 		httpjson.Write(w, http.StatusOK, connection.State())
 	})
+	mux.HandleFunc("POST /api/v1/invitations/{id}/response", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Decision string `json:"decision"`
+		}
+		if !httpjson.Decode(w, r, &body) {
+			return
+		}
+		if err := connection.Respond(r.Context(), r.PathValue("id"), body.Decision); err != nil {
+			status := http.StatusConflict
+			if client.IsInputError(err) {
+				status = http.StatusBadRequest
+			}
+			httpjson.Error(w, status, "response_failed", err.Error())
+			return
+		}
+		httpjson.Write(w, http.StatusOK, connection.State())
+	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")

@@ -15,11 +15,23 @@
   <label><input id="online-only" type="checkbox"> Только подключённые</label>
   <p id="empty" hidden>Вариантов Локи пока нет.</p>
   <div class="table-wrap"><table>
-    <thead><tr><th>Имя</th><th>ID</th><th>Состояние</th><th>Последняя связь</th></tr></thead>
+    <thead><tr><th>Имя</th><th>ID</th><th>Состояние</th><th>Последняя связь</th><th></th></tr></thead>
     <tbody id="loki-list"></tbody>
   </table></div>
   <button id="first" type="button">В начало списка</button>
   <button id="next" type="button" disabled>Следующая страница</button>
+  <section id="selected" hidden>
+    <h2>Пригласить Локи</h2>
+    <p id="selected-name"></p>
+    <form id="invite-form">
+      <label>Моя сторона <select id="mobius-side"><option value="X">X — хожу первым</option><option value="O">O — первым ходит Локи</option></select></label>
+      <button id="invite" type="submit">Пригласить</button>
+    </form>
+    <p id="invitation-status" role="status"></p>
+    <p id="invitation-statistics"></p>
+    <p id="active-game"></p>
+    <p id="invite-error" role="alert"></p>
+  </section>
   <script src="/app.js" defer></script>
 </body>
 </html>

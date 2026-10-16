@@ -20,6 +20,22 @@
     <p>Ваше имя: <span id="display-name"></span></p>
     <p>Идентификатор: <code id="loki-id"></code></p>
   </div>
+  <p id="notice" role="status"></p>
+  <section id="invitation" hidden>
+    <h2>Приглашение от Мобиуса</h2>
+    <p id="invitation-side"></p>
+    <p id="statistics"></p>
+    <p>На ответ осталось: <span id="invitation-timer"></span></p>
+    <button id="accept" type="button">Принять</button>
+    <button id="decline" type="button">Отклонить</button>
+  </section>
+  <section id="game" hidden>
+    <h2>Партия создана</h2>
+    <p>ID: <code id="game-id"></code></p>
+    <p id="game-side"></p>
+    <p id="first-player"></p>
+    <p>Совершение ходов пока недоступно.</p>
+  </section>
   <script src="/app.js" defer></script>
 </body>
 </html>

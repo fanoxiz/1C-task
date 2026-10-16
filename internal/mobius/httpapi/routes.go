@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,6 +34,29 @@ func Mobius(ready Readiness, identities *service.Identity) http.Handler {
 			return
 		}
 		httpjson.Write(w, http.StatusOK, list)
+	})
+	mux.HandleFunc("POST /api/v1/mobius/loki/{id}/invitations", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			RequestID  string `json:"request_id"`
+			MobiusSide string `json:"mobius_side"`
+		}
+		if !httpjson.Decode(w, r, &body) {
+			return
+		}
+		invitation, err := identities.Invite(r.Context(), r.PathValue("id"), body.RequestID, body.MobiusSide)
+		if err != nil {
+			identityError(w, err)
+			return
+		}
+		httpjson.Write(w, http.StatusOK, invitation)
+	})
+	mux.HandleFunc("GET /api/v1/mobius/loki/{id}/invitations", func(w http.ResponseWriter, r *http.Request) {
+		items, err := identities.Invitations(r.Context(), r.PathValue("id"))
+		if err != nil {
+			identityError(w, err)
+			return
+		}
+		httpjson.Write(w, http.StatusOK, map[string]any{"items": items})
 	})
 	return httpjson.Local(httpjson.Timeout(mux))
 }
@@ -85,11 +109,82 @@ func Loki(ready Readiness, identities *service.Identity) http.Handler {
 			httpjson.Write(w, http.StatusOK, state)
 		})
 	}
+	mux.HandleFunc("POST /api/v1/loki/invitations/{id}/response", func(w http.ResponseWriter, r *http.Request) {
+		token, ok := bearer(w, r)
+		if !ok {
+			return
+		}
+		var body struct {
+			Decision string `json:"decision"`
+		}
+		if !httpjson.Decode(w, r, &body) {
+			return
+		}
+		invitation, err := identities.Respond(r.Context(), token, r.PathValue("id"), body.Decision)
+		if err != nil {
+			identityError(w, err)
+			return
+		}
+		httpjson.Write(w, http.StatusOK, invitation)
+	})
+	mux.HandleFunc("GET /api/v1/loki/events", func(w http.ResponseWriter, r *http.Request) {
+		token, ok := bearer(w, r)
+		if !ok {
+			return
+		}
+		limit := 100
+		if raw := r.URL.Query().Get("limit"); raw != "" {
+			var err error
+			limit, err = strconv.Atoi(raw)
+			if err != nil {
+				identityError(w, service.ErrInvalidRequest)
+				return
+			}
+		}
+		batch, err := identities.Events(r.Context(), token, limit)
+		if err != nil {
+			identityError(w, err)
+			return
+		}
+		httpjson.Write(w, http.StatusOK, batch)
+	})
+	mux.HandleFunc("POST /api/v1/loki/events/{id}/ack", func(w http.ResponseWriter, r *http.Request) {
+		token, ok := bearer(w, r)
+		if !ok {
+			return
+		}
+		if err := identities.Ack(r.Context(), token, r.PathValue("id")); err != nil {
+			identityError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	return httpjson.Timeout(mux)
+}
+
+func bearer(w http.ResponseWriter, r *http.Request) (string, bool) {
+	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok || token == "" {
+		httpjson.Error(w, 401, "unauthorized", "Token required")
+		return "", false
+	}
+	return token, true
 }
 
 func identityError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, service.ErrInvalidRequest):
+		httpjson.Error(w, 400, "invalid_request", "Invalid identifier, side, decision or limit")
+	case errors.Is(err, postgres.ErrNotFound):
+		httpjson.Error(w, 404, "not_found", "Object not found")
+	case errors.Is(err, postgres.ErrExpired):
+		httpjson.Error(w, 410, "invitation_expired", "Invitation expired")
+	case errors.Is(err, postgres.ErrConflict):
+		httpjson.Error(w, 409, "conflict", "Request conflicts with an earlier decision")
+	case errors.Is(err, postgres.ErrBusy):
+		httpjson.Error(w, 409, "client_busy", "Client already has an invitation or game")
+	case errors.Is(err, postgres.ErrOffline):
+		httpjson.Error(w, 409, "client_offline", "Client is offline")
 	case errors.Is(err, service.ErrInvalidName):
 		httpjson.Error(w, 400, "invalid_name", "Display name is required")
 	case errors.Is(err, postgres.ErrInvalidCursor):

@@ -83,7 +83,10 @@ func (s *Identity) RunPresence(ctx context.Context, logger *slog.Logger) {
 			return
 		case <-ticker.C:
 			checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-			err := s.store.Expire(checkCtx)
+			err := s.store.CheckServer(checkCtx)
+			if err == nil {
+				err = s.store.Expire(checkCtx)
+			}
 			cancel()
 			if err != nil && ctx.Err() == nil {
 				logger.Error("presence check failed")

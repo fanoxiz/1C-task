@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"onec/internal/config"
+	"onec/internal/httpjson"
 	"onec/internal/httpserver"
 	"onec/internal/mobius/httpapi"
 	"onec/internal/mobius/postgres"
@@ -60,7 +63,13 @@ func run() error {
 	if err := migrations.Check(startupCtx, pool); err != nil {
 		return err
 	}
-	identities := service.NewIdentity(postgres.NewIdentityStore(pool))
+	store := postgres.NewIdentityStore(pool)
+	release, err := store.LockServer(startupCtx)
+	if err != nil {
+		return err
+	}
+	defer release()
+	identities := service.NewIdentity(store)
 	if err := identities.ResetPresence(startupCtx); err != nil {
 		return err
 	}
@@ -72,10 +81,26 @@ func run() error {
 		identities.RunPresence(workerCtx, logger)
 		close(done)
 	}()
-	ready := func(ctx context.Context) error { return migrations.Check(ctx, pool) }
+	ready := func(ctx context.Context) error {
+		if err := store.CheckServer(ctx); err != nil {
+			return err
+		}
+		return migrations.Check(ctx, pool)
+	}
+	guard := func(handler http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, "/api/") {
+				if err := store.CheckServer(r.Context()); err != nil {
+					httpjson.Error(w, http.StatusServiceUnavailable, "unavailable", "Server temporarily unavailable")
+					return
+				}
+			}
+			handler.ServeHTTP(w, r)
+		})
+	}
 	err = httpserver.Run(ctx, logger,
-		httpserver.Endpoint{Name: "mobius-ui", Addr: cfg.UIAddr, Handler: httpapi.Mobius(ready, identities)},
-		httpserver.Endpoint{Name: "loki-api", Addr: cfg.APIAddr, Handler: httpapi.Loki(ready, identities)},
+		httpserver.Endpoint{Name: "mobius-ui", Addr: cfg.UIAddr, Handler: guard(httpapi.Mobius(ready, identities))},
+		httpserver.Endpoint{Name: "loki-api", Addr: cfg.APIAddr, Handler: guard(httpapi.Loki(ready, identities))},
 	)
 	cancelWorker()
 	<-done

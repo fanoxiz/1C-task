@@ -17,18 +17,28 @@ import (
 )
 
 var (
-	ErrUnavailable = errors.New("сервер недоступен; проверьте адрес и соединение")
-	ErrToken       = errors.New("сохранённый токен не принят сервером; новая личность не создавалась")
-	ErrResponse    = errors.New("сервер вернул некорректный ответ")
-	ErrStorage     = errors.New("не удалось сохранить профиль клиента")
-	ErrName        = errors.New("укажите имя для первой регистрации")
+	ErrUnavailable  = errors.New("сервер недоступен; проверьте адрес и соединение")
+	ErrToken        = errors.New("сохранённый токен не принят сервером; новая личность не создавалась")
+	ErrResponse     = errors.New("сервер вернул некорректный ответ")
+	ErrStorage      = errors.New("не удалось сохранить профиль клиента")
+	ErrName         = errors.New("укажите имя для первой регистрации")
+	ErrExpired      = errors.New("срок приглашения истёк")
+	ErrConflict     = errors.New("приглашение уже закрыто другим решением")
+	ErrNotFound     = errors.New("объект уже удалён или недоступен")
+	ErrDecision     = errors.New("укажите корректное приглашение и решение accept или decline")
+	ErrNotConnected = errors.New("сначала подключитесь к серверу")
 )
 
 type View struct {
-	ServerAddress string         `json:"server_address"`
-	Status        string         `json:"status"`
-	Error         string         `json:"error,omitempty"`
-	Identity      *protocol.Loki `json:"identity,omitempty"`
+	ServerAddress string                `json:"server_address"`
+	Status        string                `json:"status"`
+	Error         string                `json:"error,omitempty"`
+	Identity      *protocol.Loki        `json:"identity,omitempty"`
+	Invitation    *protocol.Invitation  `json:"invitation"`
+	Game          *protocol.GameSummary `json:"game"`
+	ServerTime    time.Time             `json:"server_time"`
+	ObservedAt    time.Time             `json:"observed_at"`
+	Notice        string                `json:"notice,omitempty"`
 }
 
 type Client struct {
@@ -63,6 +73,14 @@ func (c *Client) State() View {
 		identity := *v.Identity
 		v.Identity = &identity
 	}
+	if v.Invitation != nil {
+		invitation := *v.Invitation
+		v.Invitation = &invitation
+	}
+	if v.Game != nil {
+		game := *v.Game
+		v.Game = &game
+	}
 	return v
 }
 
@@ -71,14 +89,24 @@ func (c *Client) update(status string, state *protocol.State, err error) {
 	defer c.mu.Unlock()
 	c.view.ServerAddress, c.view.Status, c.view.Error = c.server, status, ""
 	if state != nil {
+		if (state.Invitation != nil && (c.view.Invitation == nil || c.view.Invitation.ID != state.Invitation.ID)) ||
+			(state.Game != nil && (c.view.Game == nil || c.view.Game.ID != state.Game.ID)) {
+			c.view.Notice = ""
+		}
 		identity := state.Loki
 		c.view.Identity = &identity
+		c.view.Invitation, c.view.Game = state.Invitation, state.Game
+		c.view.ServerTime, c.view.ObservedAt = state.ServerTime, time.Now().UTC()
 	}
 	if err != nil {
 		c.view.Error = err.Error()
 	}
 	if c.view.Identity != nil && status != "connected" {
 		c.view.Identity.Connected = false
+	}
+	if status == "disconnected" {
+		c.view.Invitation, c.view.Game = nil, nil
+		c.view.Notice = ""
 	}
 }
 
@@ -105,6 +133,8 @@ func (c *Client) connect(ctx context.Context, server, name string) error {
 	if c.server != server {
 		c.mu.Lock()
 		c.view.Identity = nil
+		c.view.Notice = ""
+		c.view.Invitation, c.view.Game = nil, nil
 		c.mu.Unlock()
 	}
 	c.server, c.token = server, saved.Token
@@ -221,6 +251,8 @@ func (c *Client) poll(ctx context.Context) {
 	if !c.enabled {
 		return
 	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	var state protocol.State
 	method, path := http.MethodGet, "/api/v1/loki/state"
 	if c.State().Status != "connected" {
@@ -239,6 +271,9 @@ func (c *Client) poll(ctx context.Context) {
 		return
 	}
 	c.update("connected", &state, nil)
+	if err := c.consumeEvents(ctx); err != nil {
+		c.failed(err)
+	}
 }
 
 var errReconnect = errors.New("reconnect required")
@@ -275,6 +310,13 @@ func (c *Client) request(ctx context.Context, method, path string, body, result 
 		if json.NewDecoder(io.LimitReader(response.Body, 32<<10)).Decode(&failure) == nil && failure.Error.Code == "reconnect_required" {
 			return errReconnect
 		}
+		return ErrConflict
+	}
+	if response.StatusCode == http.StatusGone {
+		return ErrExpired
+	}
+	if response.StatusCode == http.StatusNotFound {
+		return ErrNotFound
 	}
 	if response.StatusCode >= 500 {
 		return ErrUnavailable
@@ -283,7 +325,7 @@ func (c *Client) request(ctx context.Context, method, path string, body, result 
 		return ErrResponse
 	}
 	if result != nil {
-		if err := json.NewDecoder(io.LimitReader(response.Body, 32<<10)).Decode(result); err != nil {
+		if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(result); err != nil {
 			return ErrResponse
 		}
 	}
@@ -291,5 +333,5 @@ func (c *Client) request(ctx context.Context, method, path string, body, result 
 }
 
 func IsInputError(err error) bool {
-	return errors.Is(err, ErrName) || errors.Is(err, profile.ErrAddress)
+	return errors.Is(err, ErrName) || errors.Is(err, profile.ErrAddress) || errors.Is(err, ErrDecision)
 }

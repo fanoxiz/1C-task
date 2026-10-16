@@ -11,8 +11,10 @@ type Loki struct {
 }
 
 type State struct {
-	Loki       Loki      `json:"loki"`
-	ServerTime time.Time `json:"server_time"`
+	Loki       Loki         `json:"loki"`
+	ServerTime time.Time    `json:"server_time"`
+	Invitation *Invitation  `json:"invitation"`
+	Game       *GameSummary `json:"game"`
 }
 
 type Registration struct {
@@ -21,8 +23,15 @@ type Registration struct {
 }
 
 type LokiList struct {
-	Items      []Loki `json:"items"`
-	NextCursor string `json:"next_cursor,omitempty"`
+	Items      []LokiStatus `json:"items"`
+	NextCursor string       `json:"next_cursor,omitempty"`
+	ServerTime time.Time    `json:"server_time"`
+}
+
+type LokiStatus struct {
+	Loki
+	Invitation *Invitation  `json:"invitation"`
+	Game       *GameSummary `json:"game"`
 }
 
 type ErrorResponse struct {
