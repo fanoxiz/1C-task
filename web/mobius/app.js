@@ -153,7 +153,11 @@ async function refresh() {
     nextButton.disabled = !nextCursor;
     if (selected) selected = list.items.find((loki) => loki.id === selected.id) || null;
     renderSelected();
-    if (!historical && selected?.game && selectedGameId !== selected.game.id) { selectedGameId = selected.game.id; gameVersion += 1; }
+    if (!historical && selected?.game && selectedGameId !== selected.game.id) {
+      selectedGameId = selected.game.id;
+      gameVersion += 1;
+      gamePanel.render(null);
+    }
     const gamesResponse = await fetch(`/api/v1/mobius/games?status=active&cursor=${gameCursor}`, { cache: 'no-store', signal: AbortSignal.timeout(4000) });
     if (!gamesResponse.ok) throw new Error('games unavailable');
     const games = await gamesResponse.json();

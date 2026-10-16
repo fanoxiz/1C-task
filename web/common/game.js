@@ -6,7 +6,7 @@ export class GamePanel {
     this.refresh = refresh;
     this.game = null;
     this.available = false;
-    this.pending = false;
+    this.pendingGames = new Set();
     this.error = '';
     this.storageKey = `onec.${role}.moves`;
     try {
@@ -26,6 +26,10 @@ export class GamePanel {
       const draft = this.drafts[this.game?.id];
       if (draft && !this.pending && this.available) this.submit(draft);
     });
+  }
+
+  get pending() {
+    return this.pendingGames.has(this.game?.id);
   }
 
   save() {
@@ -84,7 +88,7 @@ export class GamePanel {
   }
 
   async submit(draft) {
-    this.pending = true;
+    this.pendingGames.add(draft.gameId);
     this.error = '';
     this.render(this.game);
     try {
@@ -99,7 +103,7 @@ export class GamePanel {
       this.save();
       try { await this.refresh(); } catch { /* The regular polling loop reports connection status. */ }
     } finally {
-      this.pending = false;
+      this.pendingGames.delete(draft.gameId);
       this.render(this.game);
     }
   }

@@ -1,7 +1,7 @@
 DATABASE_URL ?= postgres://onec:onec@127.0.0.1:54320/onec?sslmode=disable
 export DATABASE_URL
 
-.PHONY: build fmt fmt-check vet test test-race test-integration check db migrate run-mobius run-loki up down
+.PHONY: build fmt fmt-check vet test test-race test-web test-integration check db migrate run-mobius run-loki up down
 
 build:
 	go build -o bin/mobius ./cmd/mobius
@@ -21,6 +21,9 @@ test:
 
 test-race:
 	go test -race ./...
+
+test-web:
+	node --test tests/web/*.test.mjs
 
 test-integration:
 	@test -n "$(TEST_DATABASE_URL)" || { echo 'Set TEST_DATABASE_URL to a dedicated empty test database'; exit 1; }
