@@ -141,3 +141,17 @@ test('fresh snapshot after a lost response clears the draft without resending', 
   assert.equal(reloaded.root.querySelector('[data-error]').textContent, '');
   assert.equal(reloaded.requests.length, 0);
 });
+
+test('unavailable board blocks actions and recovers on a fresh snapshot', () => {
+  const { panel, root, requests } = setup();
+  panel.render(board('A'), true);
+  assert.equal(panel.cells[0].disabled, false);
+  panel.render(panel.game, false);
+  assert.ok(panel.cells.every(cell => cell.disabled));
+  assert.match(root.querySelector('[data-error]').textContent, /Связь недоступна/);
+  panel.cells[0].click();
+  assert.equal(requests.length, 0);
+  panel.render(board('A'), true);
+  assert.equal(panel.cells[0].disabled, false);
+  assert.equal(root.querySelector('[data-error]').textContent, '');
+});

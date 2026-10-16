@@ -94,7 +94,7 @@ func (p *mobiusProcess) ready(t *testing.T) {
 func TestRealServerRestartSecondInstanceAndDatabaseOutage(t *testing.T) {
 	f := invitationSetup(t)
 	binary := filepath.Join(t.TempDir(), "mobius")
-	build := exec.CommandContext(f.ctx, "go", "build", "-o", binary, "./cmd/mobius")
+	build := exec.CommandContext(f.ctx, "go", "build", "-buildvcs=false", "-o", binary, "./cmd/mobius")
 	build.Dir = "../.."
 	if output, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build Mobius: %v: %s", err, output)

@@ -20,6 +20,7 @@ let historical = false;
 let historyCursor = '';
 let nextHistoryCursor = '';
 let historyVersion = 0;
+let available = false;
 const gamePanel = new GamePanel(document.querySelector('#game-panel'), 'mobius', async (move) => {
   gameVersion += 1;
   try {
@@ -114,8 +115,8 @@ function renderSelected() {
     ? `Партия ${selected.game.id}. Мобиус: ${selected.game.mobius_side}, Локи: ${selected.game.loki_side}. Ходит ${selected.game.next_actor === 'mobius' ? 'Мобиус' : 'Локи'}.`
     : (invitation?.status === 'accepted' ? (invitation.game_id ? 'Партия завершена.' : 'Незаконченная партия удалена.') : '');
   const retry = draft?.owner === selected.id && draft.side === sideInput.value;
-  inviteButton.textContent = retry ? 'Повторить запрос' : 'Пригласить';
-  inviteButton.disabled = invitePending || !selected.connected || (!retry && (!!selected.game || invitation?.status === 'pending'));
+  inviteButton.textContent = invitePending ? 'Отправляем…' : (retry ? 'Повторить запрос' : 'Пригласить');
+  inviteButton.disabled = invitePending || !available || !selected.connected || (!retry && (!!selected.game || invitation?.status === 'pending'));
 }
 
 async function refresh() {
@@ -124,8 +125,9 @@ async function refresh() {
   button.disabled = true;
   try {
     const response = await fetch('/readyz', { cache: 'no-store', signal: AbortSignal.timeout(4000) });
+    available = response.ok;
     status.textContent = response.ok ? 'Сервер готов к работе.' : 'Сервер временно не готов. Повторите проверку позже.';
-    if (!response.ok) { gamePanel.render(gamePanel.game, false); return; }
+    if (!response.ok) { gamePanel.render(gamePanel.game, false); renderSelected(); return; }
     const params = new URLSearchParams({ cursor, connected: String(onlineOnly.checked) });
     const listResponse = await fetch(`/api/v1/mobius/loki?${params}`, { cache: 'no-store', signal: AbortSignal.timeout(4000) });
     if (!listResponse.ok) throw new Error('list unavailable');
@@ -174,7 +176,10 @@ async function refresh() {
     }));
     await Promise.all([refreshGame(), refreshHistory()]);
   } catch {
+    available = false;
     status.textContent = 'Нет связи с сервером.';
+    gamePanel.render(gamePanel.game, false);
+    renderSelected();
   } finally {
     button.disabled = false;
     pending = false;

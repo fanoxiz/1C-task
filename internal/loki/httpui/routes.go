@@ -84,5 +84,5 @@ func Handler(connection *client.Client) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write([]byte("{\"status\":\"ok\"}\n"))
 	})
-	return httpjson.Local(httpjson.Timeout(mux))
+	return httpjson.Local(mux)
 }

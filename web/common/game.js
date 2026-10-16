@@ -55,7 +55,7 @@ export class GamePanel {
     this.root.querySelector('[data-game-id]').textContent = game.id;
     this.root.querySelector('[data-sides]').textContent = `Мобиус: ${game.mobius_side}. Локи: ${game.loki_side}.`;
     this.root.querySelector('[data-turn]').textContent = game.status === 'active'
-      ? `Ходит ${game.next_actor === 'mobius' ? 'Мобиус' : 'Локи'}.` : 'Партия завершена.';
+      ? (this.pending ? 'Отправляем ход…' : `Ходит ${game.next_actor === 'mobius' ? 'Мобиус' : 'Локи'}.`) : 'Партия завершена.';
     const outcomes = { mobius_win: 'Победил Мобиус.', loki_win: 'Победил Локи.', draw: 'Ничья.' };
     this.root.querySelector('[data-result]').textContent = outcomes[game.result] || '';
     const blocked = !available || this.pending || !!this.drafts[game.id] || game.status !== 'active' || game.next_actor !== this.role;
@@ -76,7 +76,7 @@ export class GamePanel {
     const retry = this.root.querySelector('[data-retry]');
     retry.hidden = !this.drafts[game.id];
     retry.disabled = !available || this.pending;
-    this.root.querySelector('[data-error]').textContent = this.error;
+    this.root.querySelector('[data-error]').textContent = this.error || (!available ? 'Связь недоступна. Ожидаем обновления партии.' : '');
   }
 
   play(row, column) {

@@ -4,8 +4,8 @@ export DATABASE_URL
 .PHONY: build fmt fmt-check vet test test-race test-web test-integration check db migrate run-mobius run-loki up down
 
 build:
-	go build -o bin/mobius ./cmd/mobius
-	go build -o bin/loki ./cmd/loki
+	go build -buildvcs=false -o bin/mobius ./cmd/mobius
+	go build -buildvcs=false -o bin/loki ./cmd/loki
 
 fmt:
 	gofmt -w cmd internal migrations web tests

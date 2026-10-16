@@ -99,8 +99,8 @@ func run() error {
 		})
 	}
 	err = httpserver.Run(ctx, logger,
-		httpserver.Endpoint{Name: "mobius-ui", Addr: cfg.UIAddr, Handler: guard(httpapi.Mobius(ready, identities))},
-		httpserver.Endpoint{Name: "loki-api", Addr: cfg.APIAddr, Handler: guard(httpapi.Loki(ready, identities))},
+		httpserver.Endpoint{Name: "mobius-ui", Addr: cfg.UIAddr, Handler: httpjson.Timeout(httpjson.LogRequests(logger, guard(httpapi.Mobius(ready, identities))))},
+		httpserver.Endpoint{Name: "loki-api", Addr: cfg.APIAddr, Handler: httpjson.Timeout(httpjson.LogRequests(logger, guard(httpapi.Loki(ready, identities))))},
 	)
 	cancelWorker()
 	<-done

@@ -83,7 +83,7 @@ func Mobius(ready Readiness, identities *service.Identity) http.Handler {
 		httpjson.Write(w, http.StatusOK, items)
 	})
 	gameRoutes(mux, "/api/v1/mobius/games", identities, false)
-	return httpjson.Local(httpjson.Timeout(mux))
+	return httpjson.Local(mux)
 }
 
 func Loki(ready Readiness, identities *service.Identity) http.Handler {
@@ -185,7 +185,7 @@ func Loki(ready Readiness, identities *service.Identity) http.Handler {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	gameRoutes(mux, "/api/v1/loki/games", identities, true)
-	return httpjson.Timeout(mux)
+	return mux
 }
 
 func gameRoutes(mux *http.ServeMux, prefix string, identities *service.Identity, authenticate bool) {

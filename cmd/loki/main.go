@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"onec/internal/config"
+	"onec/internal/httpjson"
 	"onec/internal/httpserver"
 	"onec/internal/loki/client"
 	"onec/internal/loki/httpui"
@@ -50,7 +51,7 @@ func run() error {
 		connection.Run(pollCtx)
 		close(done)
 	}()
-	err = httpserver.Run(ctx, logger, httpserver.Endpoint{Name: "loki-ui", Addr: cfg.UIAddr, Handler: httpui.Handler(connection)})
+	err = httpserver.Run(ctx, logger, httpserver.Endpoint{Name: "loki-ui", Addr: cfg.UIAddr, Handler: httpjson.Timeout(httpjson.LogRequests(logger, httpui.Handler(connection)))})
 	cancel()
 	<-done
 	shutdownCtx, finish := context.WithTimeout(context.Background(), 2*time.Second)
