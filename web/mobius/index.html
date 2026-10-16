@@ -4,14 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Мобиус</title>
-  <style>body { font: 18px/1.5 system-ui, sans-serif; max-width: 48rem; margin: 4rem auto; padding: 0 1rem; } button { font: inherit; } #status { min-height: 2rem; }</style>
+  <style>body { font: 18px/1.5 system-ui, sans-serif; max-width: 64rem; margin: 3rem auto; padding: 0 1rem; } button { font: inherit; } #status { min-height: 2rem; } table { width: 100%; border-collapse: collapse; } td, th { text-align: left; padding: .5rem; border-bottom: 1px solid #ccc; } .table-wrap { overflow-x: auto; }</style>
 </head>
 <body>
   <h1>Мобиус</h1>
   <p>Крестики-нолики с вариантами Локи.</p>
   <p id="status" role="status">Проверяем готовность сервера…</p>
-  <button id="refresh" type="button">Проверить готовность</button>
-  <p>Подключение игроков и создание партий пока недоступны.</p>
+  <button id="refresh" type="button">Обновить</button>
+  <h2>Варианты Локи</h2>
+  <label><input id="online-only" type="checkbox"> Только подключённые</label>
+  <p id="empty" hidden>Вариантов Локи пока нет.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Имя</th><th>ID</th><th>Состояние</th><th>Последняя связь</th></tr></thead>
+    <tbody id="loki-list"></tbody>
+  </table></div>
+  <button id="first" type="button">В начало списка</button>
+  <button id="next" type="button" disabled>Следующая страница</button>
   <script src="/app.js" defer></script>
 </body>
 </html>

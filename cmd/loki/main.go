@@ -7,10 +7,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"onec/internal/config"
 	"onec/internal/httpserver"
+	"onec/internal/loki/client"
 	"onec/internal/loki/httpui"
+	"onec/internal/loki/profile"
 )
 
 func main() {
@@ -35,5 +38,23 @@ func run() error {
 	slog.SetDefault(logger)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return httpserver.Run(ctx, logger, httpserver.Endpoint{Name: "loki-ui", Addr: cfg.UIAddr, Handler: httpui.Handler()})
+	store, err := profile.Open(cfg.StateDir)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	connection := client.New(store)
+	pollCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		connection.Run(pollCtx)
+		close(done)
+	}()
+	err = httpserver.Run(ctx, logger, httpserver.Endpoint{Name: "loki-ui", Addr: cfg.UIAddr, Handler: httpui.Handler(connection)})
+	cancel()
+	<-done
+	shutdownCtx, finish := context.WithTimeout(context.Background(), 2*time.Second)
+	defer finish()
+	connection.Shutdown(shutdownCtx)
+	return err
 }

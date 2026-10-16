@@ -52,6 +52,8 @@ services:
     command: ["/app/loki"]
     environment:
       LOKI_UI_LISTEN_ADDR: 127.0.0.1:8082
+    volumes:
+      - loki_data:/state
     healthcheck:
       test: ["CMD", "/app/loki", "healthcheck", "http://127.0.0.1:8082/healthz"]
       interval: 5s
@@ -60,3 +62,4 @@ services:
 
 volumes:
   postgres_data:
+  loki_data:

@@ -13,6 +13,7 @@ import (
 	"onec/internal/httpserver"
 	"onec/internal/mobius/httpapi"
 	"onec/internal/mobius/postgres"
+	"onec/internal/mobius/service"
 	"onec/migrations"
 )
 
@@ -59,10 +60,24 @@ func run() error {
 	if err := migrations.Check(startupCtx, pool); err != nil {
 		return err
 	}
+	identities := service.NewIdentity(postgres.NewIdentityStore(pool))
+	if err := identities.ResetPresence(startupCtx); err != nil {
+		return err
+	}
 	cancel()
+	workerCtx, cancelWorker := context.WithCancel(ctx)
+	defer cancelWorker()
+	done := make(chan struct{})
+	go func() {
+		identities.RunPresence(workerCtx, logger)
+		close(done)
+	}()
 	ready := func(ctx context.Context) error { return migrations.Check(ctx, pool) }
-	return httpserver.Run(ctx, logger,
-		httpserver.Endpoint{Name: "mobius-ui", Addr: cfg.UIAddr, Handler: httpapi.Mobius(ready)},
-		httpserver.Endpoint{Name: "loki-api", Addr: cfg.APIAddr, Handler: httpapi.Loki(ready)},
+	err = httpserver.Run(ctx, logger,
+		httpserver.Endpoint{Name: "mobius-ui", Addr: cfg.UIAddr, Handler: httpapi.Mobius(ready, identities)},
+		httpserver.Endpoint{Name: "loki-api", Addr: cfg.APIAddr, Handler: httpapi.Loki(ready, identities)},
 	)
+	cancelWorker()
+	<-done
+	return err
 }

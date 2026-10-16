@@ -46,11 +46,11 @@ func TestBootstrap(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT value FROM game.bootstrap_probe").Scan(&value); err != nil || value != "preserved" {
 		t.Fatalf("migration did not preserve data: %q %v", value, err)
 	}
-	handler := httpapi.Mobius(func(ctx context.Context) error { return migrations.Check(ctx, pool) })
+	handler := httpapi.Mobius(func(ctx context.Context) error { return migrations.Check(ctx, pool) }, nil)
 	checkReady := func(want int) {
 		t.Helper()
 		response := httptest.NewRecorder()
-		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "http://127.0.0.1/readyz", nil))
 		if response.Code != want {
 			t.Fatalf("readiness: got %d, want %d", response.Code, want)
 		}

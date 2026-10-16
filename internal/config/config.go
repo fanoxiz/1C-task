@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 )
 
@@ -17,6 +18,7 @@ type Mobius struct {
 
 type Loki struct {
 	UIAddr   string
+	StateDir string
 	LogLevel slog.Level
 }
 
@@ -43,6 +45,14 @@ func LoadLoki() (Loki, error) {
 	c := Loki{UIAddr: env("LOKI_UI_LISTEN_ADDR", "127.0.0.1:8082")}
 	if err := validateAddr(c.UIAddr, true); err != nil {
 		return c, fmt.Errorf("LOKI_UI_LISTEN_ADDR: %w", err)
+	}
+	c.StateDir = os.Getenv("LOKI_STATE_DIR")
+	if c.StateDir == "" {
+		root, err := os.UserConfigDir()
+		if err != nil {
+			return c, fmt.Errorf("set LOKI_STATE_DIR: user config directory unavailable")
+		}
+		c.StateDir = filepath.Join(root, "onec", "loki")
 	}
 	err := c.LogLevel.UnmarshalText([]byte(env("LOG_LEVEL", "INFO")))
 	return c, err
