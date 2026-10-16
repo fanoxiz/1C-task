@@ -1,0 +1,62 @@
+name: onec
+
+x-app: &app
+  image: onec-app:dev
+  build: .
+  network_mode: host
+
+services:
+  postgres:
+    image: postgres:15.19-alpine3.23
+    environment:
+      POSTGRES_USER: onec
+      POSTGRES_PASSWORD: onec
+      POSTGRES_DB: onec
+    ports:
+      - "127.0.0.1:54320:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onec -d onec"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  migrate:
+    <<: *app
+    command: ["/app/mobius", "migrate"]
+    environment:
+      DATABASE_URL: postgres://onec:onec@127.0.0.1:54320/onec?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mobius:
+    <<: *app
+    command: ["/app/mobius"]
+    environment:
+      DATABASE_URL: postgres://onec:onec@127.0.0.1:54320/onec?sslmode=disable
+      MOBIUS_LISTEN_ADDR: 127.0.0.1:8080
+      LOKI_API_LISTEN_ADDR: 0.0.0.0:8081
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/app/mobius", "healthcheck", "http://127.0.0.1:8080/readyz"]
+      interval: 5s
+      timeout: 4s
+      retries: 5
+
+  loki:
+    <<: *app
+    command: ["/app/loki"]
+    environment:
+      LOKI_UI_LISTEN_ADDR: 127.0.0.1:8082
+    healthcheck:
+      test: ["CMD", "/app/loki", "healthcheck", "http://127.0.0.1:8082/healthz"]
+      interval: 5s
+      timeout: 4s
+      retries: 5
+
+volumes:
+  postgres_data:
