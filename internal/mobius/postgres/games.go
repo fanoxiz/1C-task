@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -178,6 +179,52 @@ func (s *IdentityStore) ActiveGames(ctx context.Context, cursor string) (protoco
 			return result, err
 		}
 		fillTurn(&item, count)
+		result.Items = append(result.Items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return result, err
+	}
+	if len(result.Items) > 50 {
+		result.Items = result.Items[:50]
+		result.NextCursor = result.Items[49].ID
+	}
+	return result, nil
+}
+
+// Completed games are immutable, so their IDs also identify stable (finished_at, id) cursors.
+func (s *IdentityStore) GameHistory(ctx context.Context, owner, cursor string) (protocol.GameHistory, error) {
+	result := protocol.GameHistory{Items: []protocol.GameHistoryItem{}}
+	var exists bool
+	if err := s.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM game.loki WHERE id=$1)", owner).Scan(&exists); err != nil {
+		return result, err
+	}
+	if !exists {
+		return result, ErrNotFound
+	}
+	var before *time.Time
+	if cursor != "" {
+		err := s.pool.QueryRow(ctx, "SELECT finished_at FROM game.games WHERE id=$1 AND loki_id=$2 AND status='completed'", cursor, owner).Scan(&before)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return result, ErrInvalidCursor
+		}
+		if err != nil {
+			return result, err
+		}
+	}
+	rows, err := s.pool.Query(ctx, `SELECT id::text,loki_id::text,mobius_side,status,result,created_at,finished_at
+		FROM game.games WHERE loki_id=$1 AND status='completed'
+		AND ($2::timestamptz IS NULL OR (finished_at,id)<($2,NULLIF($3,'')::uuid))
+		ORDER BY finished_at DESC,id DESC LIMIT 51`, owner, before, cursor)
+	if err != nil {
+		return result, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item protocol.GameHistoryItem
+		if err := rows.Scan(&item.ID, &item.LokiID, &item.MobiusSide, &item.Status, &item.Result, &item.CreatedAt, &item.FinishedAt); err != nil {
+			return result, err
+		}
+		fillTurn(&item.GameSummary, 0)
 		result.Items = append(result.Items, item)
 	}
 	if err := rows.Err(); err != nil {

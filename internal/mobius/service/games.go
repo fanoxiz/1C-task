@@ -46,3 +46,10 @@ func (s *Identity) ActiveGames(ctx context.Context, cursor string) (protocol.Gam
 	}
 	return s.store.ActiveGames(ctx, cursor)
 }
+
+func (s *Identity) GameHistory(ctx context.Context, owner, cursor string) (protocol.GameHistory, error) {
+	if !protocol.IsUUID(owner) || (cursor != "" && !protocol.IsUUID(cursor)) {
+		return protocol.GameHistory{}, ErrInvalidRequest
+	}
+	return s.store.GameHistory(ctx, strings.ToLower(owner), cursor)
+}

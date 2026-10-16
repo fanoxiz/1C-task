@@ -15,7 +15,7 @@
   <label><input id="online-only" type="checkbox"> Только подключённые</label>
   <p id="empty" hidden>Вариантов Локи пока нет.</p>
   <div class="table-wrap"><table>
-    <thead><tr><th>Имя</th><th>ID</th><th>Состояние</th><th>Последняя связь</th><th></th></tr></thead>
+    <thead><tr><th>Имя</th><th>ID</th><th>Состояние</th><th>Последняя связь</th><th>Статистика Локи</th><th></th></tr></thead>
     <tbody id="loki-list"></tbody>
   </table></div>
   <button id="first" type="button">В начало списка</button>
@@ -23,6 +23,7 @@
   <section id="selected" hidden>
     <h2>Пригласить Локи</h2>
     <p id="selected-name"></p>
+    <p id="selected-statistics"></p>
     <form id="invite-form">
       <label>Моя сторона <select id="mobius-side"><option value="X">X — хожу первым</option><option value="O">O — первым ходит Локи</option></select></label>
       <button id="invite" type="submit">Пригласить</button>
@@ -31,6 +32,11 @@
     <p id="invitation-statistics"></p>
     <p id="active-game"></p>
     <p id="invite-error" role="alert"></p>
+    <h3>Завершённые партии этого Локи</h3>
+    <p id="history-status" role="status"></p>
+    <ul id="history"></ul>
+    <button id="history-first" type="button">В начало истории</button>
+    <button id="history-next" type="button" disabled>Следующая страница истории</button>
   </section>
   <h2>Незаконченные партии</h2>
   <ul id="active-games"></ul>

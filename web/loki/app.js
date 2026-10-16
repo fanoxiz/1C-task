@@ -1,4 +1,5 @@
 import { GamePanel, moveBody, moveResponse } from '/game.js';
+import { scoreText } from '/statistics.js';
 
 const form = document.querySelector('#connection');
 const serverInput = document.querySelector('#server');
@@ -50,6 +51,7 @@ function render(state) {
   document.querySelector('#identity').hidden = !state.identity;
   document.querySelector('#display-name').textContent = state.identity?.display_name || '';
   document.querySelector('#loki-id').textContent = state.identity?.id || '';
+  document.querySelector('#own-statistics').textContent = `${scoreText(state.statistics)} ${state.statistics.message}`;
   const invitation = state.invitation;
   document.querySelector('#notice').textContent = state.notice || '';
   document.querySelector('#invitation').hidden = !invitation;
@@ -57,7 +59,7 @@ function render(state) {
     invitationDeadline = Date.now() + Date.parse(invitation.expires_at) - Date.parse(state.server_time)
       - Math.max(0, Date.now() - Date.parse(state.observed_at));
     document.querySelector('#invitation-side').textContent = `Мобиус играет ${invitation.mobius_side}. Вы играете ${invitation.mobius_side === 'X' ? 'O' : 'X'}.`;
-    document.querySelector('#statistics').textContent = invitation.statistics_snapshot.message;
+    document.querySelector('#statistics').textContent = `На момент приглашения: ${scoreText(invitation.statistics_snapshot)} ${invitation.statistics_snapshot.message}`;
   }
   gamePanel.render(state.game, state.status === 'connected');
   countdown();

@@ -82,8 +82,13 @@ func disconnectActivity(ctx context.Context, tx pgx.Tx, owner string, now time.T
 }
 
 func snapshot(ctx context.Context, tx pgx.Tx, state *protocol.State) error {
+	var err error
+	state.Statistics, err = statistics(ctx, tx, state.Loki.ID)
+	if err != nil {
+		return err
+	}
 	var gameID *string
-	err := tx.QueryRow(ctx, `SELECT
+	err = tx.QueryRow(ctx, `SELECT
 		(SELECT to_jsonb(i) FROM game.invitations i WHERE loki_id = $1 AND status = 'pending'),
 		(SELECT id::text FROM game.games WHERE loki_id = $1
 		 ORDER BY (status='active') DESC, finished_at DESC NULLS LAST, id DESC LIMIT 1)`, state.Loki.ID).
@@ -132,7 +137,7 @@ func statistics(ctx context.Context, tx pgx.Tx, owner string) (protocol.Statisti
 		FROM mine m LEFT JOIN scores s ON s.loki_id <> $1 GROUP BY m.wins, m.played`, owner).
 		Scan(&result.Wins, &result.Played, &result.WinRate, &result.BetterPercent)
 	if result.Played == 0 {
-		result.Message = "Вы ещё не сыграли ни одной партии. Самое время начать!"
+		result.Message = newcomerMessage
 	} else if result.BetterPercent == nil {
 		result.Message = "Пока недостаточно данных для сравнения"
 	} else {

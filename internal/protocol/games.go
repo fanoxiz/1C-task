@@ -32,6 +32,17 @@ type GameList struct {
 	NextCursor string        `json:"next_cursor,omitempty"`
 }
 
+type GameHistoryItem struct {
+	GameSummary
+	CreatedAt  time.Time `json:"created_at"`
+	FinishedAt time.Time `json:"finished_at"`
+}
+
+type GameHistory struct {
+	Items      []GameHistoryItem `json:"items"`
+	NextCursor string            `json:"next_cursor,omitempty"`
+}
+
 type MoveRequest struct {
 	RequestID          string `json:"request_id"`
 	ExpectedMoveNumber int    `json:"expected_move_number"`

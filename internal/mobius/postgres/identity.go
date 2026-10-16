@@ -24,10 +24,13 @@ type IdentityStore struct {
 	serverLock *serverLock
 }
 
+const newcomerMessage = "Вы ещё не сыграли ни одной партии. Самое время начать!"
+
 func NewIdentityStore(pool *pgxpool.Pool) *IdentityStore { return &IdentityStore{pool: pool} }
 
 func (s *IdentityStore) Register(ctx context.Context, name string, hash []byte) (protocol.State, error) {
 	var state protocol.State
+	state.Statistics.Message = newcomerMessage
 	err := s.pool.QueryRow(ctx, `INSERT INTO game.loki (display_name, token_hash, connected, last_seen_at)
 		VALUES ($1, $2, true, clock_timestamp())
 		RETURNING id::text, display_name, connected, created_at, last_seen_at, clock_timestamp()`, name, hash).
@@ -184,10 +187,13 @@ func (s *IdentityStore) List(ctx context.Context, cursor string, onlineOnly bool
 	}
 	rows, err := s.pool.Query(ctx, `SELECT l.id::text, l.display_name,
 		l.connected AND l.last_seen_at > clock_timestamp() - interval '30 seconds', l.created_at, l.last_seen_at, to_jsonb(i), to_jsonb(g),
-		(SELECT count(*) FROM game.moves m WHERE m.game_id=g.id)
+		(SELECT count(*) FROM game.moves m WHERE m.game_id=g.id), score.wins, score.played,
+		CASE WHEN score.played > 0 THEN score.wins::double precision / score.played END
 		FROM game.loki l
 		LEFT JOIN LATERAL (SELECT * FROM game.invitations WHERE loki_id = l.id ORDER BY created_at DESC, id DESC LIMIT 1) i ON true
 		LEFT JOIN game.games g ON g.loki_id = l.id AND g.status = 'active'
+		LEFT JOIN LATERAL (SELECT count(*) played, count(*) FILTER (WHERE result='loki_win') wins
+			FROM game.games WHERE loki_id=l.id AND status='completed') score ON true
 		WHERE (NULLIF($1, '')::uuid IS NULL OR l.id > NULLIF($1, '')::uuid)
 		AND (NOT $2 OR (l.connected AND l.last_seen_at > clock_timestamp() - interval '30 seconds'))
 		ORDER BY l.id LIMIT 51`, cursor, onlineOnly)
@@ -198,7 +204,8 @@ func (s *IdentityStore) List(ctx context.Context, cursor string, onlineOnly bool
 	for rows.Next() {
 		var item protocol.LokiStatus
 		var count int
-		if err := rows.Scan(&item.ID, &item.DisplayName, &item.Connected, &item.CreatedAt, &item.LastSeenAt, &item.Invitation, &item.Game, &count); err != nil {
+		if err := rows.Scan(&item.ID, &item.DisplayName, &item.Connected, &item.CreatedAt, &item.LastSeenAt, &item.Invitation, &item.Game, &count,
+			&item.Statistics.Wins, &item.Statistics.Played, &item.Statistics.WinRate); err != nil {
 			return result, err
 		}
 		if item.Game != nil {

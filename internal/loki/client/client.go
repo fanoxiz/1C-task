@@ -42,6 +42,7 @@ type View struct {
 	Identity      *protocol.Loki       `json:"identity,omitempty"`
 	Invitation    *protocol.Invitation `json:"invitation"`
 	Game          *protocol.Game       `json:"game"`
+	Statistics    protocol.Statistics  `json:"statistics"`
 	ServerTime    time.Time            `json:"server_time"`
 	ObservedAt    time.Time            `json:"observed_at"`
 	Notice        string               `json:"notice,omitempty"`
@@ -103,6 +104,7 @@ func (c *Client) update(status string, state *protocol.State, err error) {
 		identity := state.Loki
 		c.view.Identity = &identity
 		c.view.Invitation, c.view.Game = state.Invitation, state.Game
+		c.view.Statistics = state.Statistics
 		c.view.ServerTime, c.view.ObservedAt = state.ServerTime, time.Now().UTC()
 	}
 	if err != nil {
@@ -142,6 +144,7 @@ func (c *Client) connect(ctx context.Context, server, name string) error {
 		c.view.Identity = nil
 		c.view.Notice = ""
 		c.view.Invitation, c.view.Game = nil, nil
+		c.view.Statistics = protocol.Statistics{}
 		c.mu.Unlock()
 	}
 	c.server, c.token = server, saved.Token

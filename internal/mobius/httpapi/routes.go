@@ -25,6 +25,7 @@ func Mobius(ready Readiness, identities *service.Identity) http.Handler {
 	mux.Handle("GET /{$}", web.Handler("mobius"))
 	mux.Handle("GET /app.js", web.Handler("mobius"))
 	mux.Handle("GET /game.js", web.Handler("common"))
+	mux.Handle("GET /statistics.js", web.Handler("common"))
 	mux.HandleFunc("GET /api/v1/mobius/loki", func(w http.ResponseWriter, r *http.Request) {
 		online := r.URL.Query().Get("connected")
 		if online != "" && online != "true" && online != "false" {
@@ -60,6 +61,14 @@ func Mobius(ready Readiness, identities *service.Identity) http.Handler {
 			return
 		}
 		httpjson.Write(w, http.StatusOK, map[string]any{"items": items})
+	})
+	mux.HandleFunc("GET /api/v1/mobius/loki/{id}/games", func(w http.ResponseWriter, r *http.Request) {
+		items, err := identities.GameHistory(r.Context(), r.PathValue("id"), r.URL.Query().Get("cursor"))
+		if err != nil {
+			identityError(w, err)
+			return
+		}
+		httpjson.Write(w, http.StatusOK, items)
 	})
 	mux.HandleFunc("GET /api/v1/mobius/games", func(w http.ResponseWriter, r *http.Request) {
 		if status := r.URL.Query().Get("status"); status != "" && status != "active" {

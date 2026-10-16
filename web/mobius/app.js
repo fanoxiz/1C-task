@@ -1,4 +1,5 @@
 import { GamePanel, moveBody, moveResponse } from '/game.js';
+import { scoreText } from '/statistics.js';
 
 const status = document.querySelector('#status');
 const button = document.querySelector('#refresh');
@@ -15,6 +16,10 @@ let gameCursor = '';
 let nextGameCursor = '';
 let selectedGameId = '';
 let gameVersion = 0;
+let historical = false;
+let historyCursor = '';
+let nextHistoryCursor = '';
+let historyVersion = 0;
 const gamePanel = new GamePanel(document.querySelector('#game-panel'), 'mobius', async (move) => {
   gameVersion += 1;
   try {
@@ -33,17 +38,59 @@ async function refreshGame() {
     if (!response.ok) throw new Error('game unavailable');
     const game = await response.json();
     if (id === selectedGameId && version === gameVersion) gamePanel.render(game, true);
-  } catch { gamePanel.render(gamePanel.game, false); }
+  } catch {
+    if (id === selectedGameId && version === gameVersion) gamePanel.render(gamePanel.game, false);
+  }
+}
+
+async function refreshHistory() {
+  if (!selected) return;
+  const owner = selected.id;
+  const version = ++historyVersion;
+  try {
+    const params = new URLSearchParams({ cursor: historyCursor });
+    const response = await fetch(`/api/v1/mobius/loki/${owner}/games?${params}`, { cache: 'no-store', signal: AbortSignal.timeout(4000) });
+    if (!response.ok) throw new Error('history unavailable');
+    const history = await response.json();
+    if (selected?.id !== owner || version !== historyVersion) return;
+    nextHistoryCursor = history.next_cursor || '';
+    document.querySelector('#history-next').disabled = !nextHistoryCursor;
+    document.querySelector('#history-status').textContent = history.items.length ? '' : 'Завершённых партий пока нет.';
+    const results = { loki_win: 'Победил Локи', mobius_win: 'Победил Мобиус', draw: 'Ничья' };
+    document.querySelector('#history').replaceChildren(...history.items.map((game) => {
+      const item = document.createElement('li');
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.textContent = `${new Date(game.finished_at).toLocaleString()} · ${results[game.result]} · Мобиус: ${game.mobius_side} · ${game.id}`;
+      open.addEventListener('click', () => {
+        historical = true;
+        selectedGameId = game.id;
+        gameVersion += 1;
+        gamePanel.render(null);
+        refreshGame();
+      });
+      item.append(open);
+      return item;
+    }));
+  } catch {
+    if (selected?.id === owner && version === historyVersion) document.querySelector('#history-status').textContent = 'Не удалось обновить историю.';
+  }
 }
 
 function selectLoki(loki) {
   selected = loki;
+  historical = false;
+  historyCursor = nextHistoryCursor = '';
+  document.querySelector('#history').replaceChildren();
+  document.querySelector('#history-status').textContent = 'Загружаем историю…';
+  document.querySelector('#history-next').disabled = true;
   selectedGameId = loki.game?.id || loki.invitation?.game_id || '';
   gameVersion += 1;
   gamePanel.render(null);
   document.querySelector('#invite-error').textContent = '';
   renderSelected();
   refreshGame();
+  refreshHistory();
 }
 const inviteButton = document.querySelector('#invite');
 const sideInput = document.querySelector('#mobius-side');
@@ -52,6 +99,7 @@ function renderSelected() {
   document.querySelector('#selected').hidden = !selected;
   if (!selected) return;
   document.querySelector('#selected-name').textContent = `${selected.display_name} (${selected.id})`;
+  document.querySelector('#selected-statistics').textContent = scoreText(selected.statistics);
   const invitation = selected.invitation;
   const labels = { pending: 'Ожидает ответа', accepted: 'Принято', declined: 'Отклонено', expired: 'Время ответа истекло', cancelled: 'Отменено' };
   let text = invitation ? labels[invitation.status] : 'Приглашений ещё нет.';
@@ -60,7 +108,8 @@ function renderSelected() {
     text += ` — осталось ${seconds} сек.`;
   }
   document.querySelector('#invitation-status').textContent = text;
-  document.querySelector('#invitation-statistics').textContent = invitation?.statistics_snapshot.message || '';
+  document.querySelector('#invitation-statistics').textContent = invitation
+    ? `На момент приглашения: ${scoreText(invitation.statistics_snapshot)} ${invitation.statistics_snapshot.message}` : '';
   document.querySelector('#active-game').textContent = selected.game
     ? `Партия ${selected.game.id}. Мобиус: ${selected.game.mobius_side}, Локи: ${selected.game.loki_side}. Ходит ${selected.game.next_actor === 'mobius' ? 'Мобиус' : 'Локи'}.`
     : (invitation?.status === 'accepted' ? (invitation.game_id ? 'Партия завершена.' : 'Незаконченная партия удалена.') : '');
@@ -84,7 +133,7 @@ async function refresh() {
     serverOffset = Date.parse(list.server_time) - Date.now();
     const rows = list.items.map((loki) => {
       const row = document.createElement('tr');
-      for (const text of [loki.display_name, loki.id, loki.connected ? 'Подключён' : 'Отключён', loki.last_seen_at ? new Date(loki.last_seen_at).toLocaleString() : '—']) {
+      for (const text of [loki.display_name, loki.id, loki.connected ? 'Подключён' : 'Отключён', loki.last_seen_at ? new Date(loki.last_seen_at).toLocaleString() : '—', scoreText(loki.statistics)]) {
         const cell = document.createElement('td');
         cell.textContent = text;
         row.append(cell);
@@ -104,7 +153,7 @@ async function refresh() {
     nextButton.disabled = !nextCursor;
     if (selected) selected = list.items.find((loki) => loki.id === selected.id) || null;
     renderSelected();
-    if (selected?.game && selectedGameId !== selected.game.id) { selectedGameId = selected.game.id; gameVersion += 1; }
+    if (!historical && selected?.game && selectedGameId !== selected.game.id) { selectedGameId = selected.game.id; gameVersion += 1; }
     const gamesResponse = await fetch(`/api/v1/mobius/games?status=active&cursor=${gameCursor}`, { cache: 'no-store', signal: AbortSignal.timeout(4000) });
     if (!gamesResponse.ok) throw new Error('games unavailable');
     const games = await gamesResponse.json();
@@ -115,11 +164,11 @@ async function refresh() {
       const open = document.createElement('button');
       open.type = 'button';
       open.textContent = `Локи ${game.loki_id} · партия ${game.id}`;
-      open.addEventListener('click', () => { selected = null; selectedGameId = game.id; gameVersion += 1; renderSelected(); refreshGame(); });
+      open.addEventListener('click', () => { selected = null; historical = false; selectedGameId = game.id; gameVersion += 1; gamePanel.render(null); renderSelected(); refreshGame(); });
       item.append(open);
       return item;
     }));
-    await refreshGame();
+    await Promise.all([refreshGame(), refreshHistory()]);
   } catch {
     status.textContent = 'Нет связи с сервером.';
   } finally {
@@ -165,6 +214,8 @@ document.querySelector('#invite-form').addEventListener('submit', async (event) 
 });
 document.querySelector('#games-first').addEventListener('click', () => { gameCursor = ''; refresh(); });
 document.querySelector('#games-next').addEventListener('click', () => { gameCursor = nextGameCursor; refresh(); });
+document.querySelector('#history-first').addEventListener('click', () => { historyCursor = ''; refreshHistory(); });
+document.querySelector('#history-next').addEventListener('click', () => { historyCursor = nextHistoryCursor; refreshHistory(); });
 refresh();
 setInterval(refresh, 1000);
 setInterval(renderSelected, 200);

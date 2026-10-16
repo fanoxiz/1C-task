@@ -15,6 +15,7 @@ type State struct {
 	ServerTime time.Time   `json:"server_time"`
 	Invitation *Invitation `json:"invitation"`
 	Game       *Game       `json:"game"`
+	Statistics Statistics  `json:"statistics"`
 }
 
 type Registration struct {
@@ -32,6 +33,13 @@ type LokiStatus struct {
 	Loki
 	Invitation *Invitation  `json:"invitation"`
 	Game       *GameSummary `json:"game"`
+	Statistics Score        `json:"statistics"`
+}
+
+type Score struct {
+	Wins    int64    `json:"wins"`
+	Played  int64    `json:"played"`
+	WinRate *float64 `json:"win_rate"`
 }
 
 type ErrorResponse struct {
