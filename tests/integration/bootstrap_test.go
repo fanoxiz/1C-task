@@ -6,42 +6,14 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
-	"time"
 
 	"onec/internal/mobius/httpapi"
-	"onec/internal/mobius/postgres"
 	"onec/migrations"
 )
 
 func TestBootstrap(t *testing.T) {
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
-		t.Fatal("TEST_DATABASE_URL must point to a dedicated empty database")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	pool, err := postgres.Open(ctx, url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer pool.Close()
-	var occupied bool
-	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'game')
-		OR to_regclass('public.schema_migrations') IS NOT NULL`).Scan(&occupied); err != nil {
-		t.Fatal(err)
-	}
-	if occupied {
-		t.Fatal("refusing to use a database with an existing game schema or migration journal")
-	}
-	defer func() {
-		cleanupCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
-		defer stop()
-		if _, err := pool.Exec(cleanupCtx, "DROP SCHEMA IF EXISTS game CASCADE; DROP TABLE IF EXISTS public.schema_migrations"); err != nil {
-			t.Error(err)
-		}
-	}()
+	ctx, pool := testDatabase(t)
 	if err := migrations.Check(ctx, pool); err == nil {
 		t.Fatal("unmigrated database reported ready")
 	}
