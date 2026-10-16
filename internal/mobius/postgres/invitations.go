@@ -124,24 +124,36 @@ func fillTurn(game *protocol.GameSummary, count int) {
 
 func statistics(ctx context.Context, tx pgx.Tx, owner string) (protocol.Statistics, error) {
 	var result protocol.Statistics
+	var comparison int
 	err := tx.QueryRow(ctx, `WITH scores AS (
-		SELECT loki_id, count(*)::bigint played, count(*) FILTER (WHERE result = 'loki_win')::bigint wins
+		SELECT loki_id, count(*)::bigint played, count(*) FILTER (WHERE result = 'loki_win')::bigint wins,
+			count(*) FILTER (WHERE result = 'draw')::bigint draws, count(*) FILTER (WHERE result = 'mobius_win')::bigint losses
 		FROM game.games WHERE status = 'completed' GROUP BY loki_id
 	), mine AS (
-		SELECT COALESCE(s.played, 0) played, COALESCE(s.wins, 0) wins
+		SELECT COALESCE(s.played, 0) played, COALESCE(s.wins, 0) wins, COALESCE(s.draws, 0) draws, COALESCE(s.losses, 0) losses
 		FROM game.loki l LEFT JOIN scores s ON s.loki_id = l.id WHERE l.id = $1
-	) SELECT m.wins, m.played,
-		CASE WHEN m.played > 0 THEN m.wins::double precision / m.played END,
-		CASE WHEN m.played > 0 AND count(s.loki_id) > 0 THEN
-			round(100.0 * count(s.loki_id) FILTER (WHERE s.wins::numeric * m.played > m.wins::numeric * s.played) / count(s.loki_id))::integer END
-		FROM mine m LEFT JOIN scores s ON s.loki_id <> $1 GROUP BY m.wins, m.played`, owner).
-		Scan(&result.Wins, &result.Played, &result.WinRate, &result.BetterPercent)
+	), comparison AS (
+		SELECT m.wins, m.played, m.draws, m.losses, count(s.loki_id) eligible,
+			count(s.loki_id) FILTER (WHERE s.wins::numeric * m.played > m.wins::numeric * s.played) better,
+			count(s.loki_id) FILTER (WHERE s.wins::numeric * m.played < m.wins::numeric * s.played) worse
+		FROM mine m LEFT JOIN scores s ON s.loki_id <> $1 GROUP BY m.wins, m.played, m.draws, m.losses
+	) SELECT wins, played, draws, losses,
+		CASE WHEN played > 0 THEN wins::double precision / played END,
+		CASE WHEN played > 0 AND eligible > 0 THEN round(100.0 * better / eligible)::integer END,
+		CASE WHEN played > 0 AND eligible > 0 THEN round(100.0 * worse / eligible)::integer END,
+		sign(2::numeric * worse - eligible)::integer FROM comparison`, owner).
+		Scan(&result.Wins, &result.Played, &result.Draws, &result.Losses, &result.WinRate, &result.BetterPercent, &result.OutperformedPercent, &comparison)
 	if result.Played == 0 {
 		result.Message = newcomerMessage
-	} else if result.BetterPercent == nil {
-		result.Message = "Пока недостаточно данных для сравнения"
-	} else {
-		result.Message = fmt.Sprintf("Вы хуже %d %% своих версий. Вы вообще стараетесь?", *result.BetterPercent)
+	} else if result.BetterPercent != nil {
+		switch {
+		case comparison == 0:
+			result.Message = "Вы бейзлайн"
+		case comparison > 0:
+			result.Message = fmt.Sprintf("Вы лучше %d %% своих версий.", *result.OutperformedPercent)
+		default:
+			result.Message = fmt.Sprintf("Вы хуже %d %% своих версий. Вы вообще стараетесь?", *result.BetterPercent)
+		}
 	}
 	return result, err
 }

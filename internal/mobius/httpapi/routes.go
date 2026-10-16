@@ -26,6 +26,8 @@ func Mobius(ready Readiness, identities *service.Identity) http.Handler {
 	mux.Handle("GET /app.js", web.Handler("mobius"))
 	mux.Handle("GET /game.js", web.Handler("common"))
 	mux.Handle("GET /statistics.js", web.Handler("common"))
+	mux.Handle("GET /statistics.css", web.Handler("common"))
+	mux.Handle("GET /layout.css", web.Handler("common"))
 	mux.HandleFunc("GET /api/v1/mobius/loki", func(w http.ResponseWriter, r *http.Request) {
 		online := r.URL.Query().Get("connected")
 		if online != "" && online != "true" && online != "false" {

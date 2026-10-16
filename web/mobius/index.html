@@ -4,57 +4,81 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Мобиус</title>
-  <style>body { font: 18px/1.5 system-ui, sans-serif; max-width: 64rem; margin: 3rem auto; padding: 0 1rem; } button { font: inherit; } #status { min-height: 2rem; } table { width: 100%; border-collapse: collapse; } td, th { text-align: left; padding: .5rem; border-bottom: 1px solid #ccc; } .table-wrap { overflow-x: auto; }</style>
+  <link rel="stylesheet" href="/statistics.css">
+  <link rel="stylesheet" href="/layout.css">
 </head>
 <body>
-  <h1>Мобиус</h1>
-  <p>Крестики-нолики с вариантами Локи.</p>
-  <p id="status" role="status">Проверяем готовность сервера…</p>
-  <button id="refresh" type="button">Обновить</button>
-  <h2>Варианты Локи</h2>
-  <label><input id="online-only" type="checkbox"> Только подключённые</label>
-  <p id="empty" hidden>Вариантов Локи пока нет.</p>
-  <div class="table-wrap"><table>
-    <thead><tr><th>Имя</th><th>ID</th><th>Состояние</th><th>Последняя связь</th><th>Статистика Локи</th><th></th></tr></thead>
-    <tbody id="loki-list"></tbody>
-  </table></div>
-  <button id="first" type="button">В начало списка</button>
-  <button id="next" type="button" disabled>Следующая страница</button>
-  <section id="selected" hidden>
-    <h2>Пригласить Локи</h2>
-    <p id="selected-name"></p>
-    <p id="selected-statistics"></p>
-    <form id="invite-form">
-      <label>Моя сторона <select id="mobius-side"><option value="X">X — хожу первым</option><option value="O">O — первым ходит Локи</option></select></label>
-      <button id="invite" type="submit">Пригласить</button>
-    </form>
-    <p id="invitation-status" role="status"></p>
-    <p id="invitation-statistics"></p>
-    <p id="active-game"></p>
-    <p id="invite-error" role="alert"></p>
-    <h3>Завершённые партии этого Локи</h3>
-    <p id="history-status" role="status"></p>
-    <ul id="history"></ul>
-    <button id="history-first" type="button">В начало истории</button>
-    <button id="history-next" type="button" disabled>Следующая страница истории</button>
-  </section>
-  <h2>Незаконченные партии</h2>
-  <ul id="active-games"></ul>
-  <button id="games-first" type="button">В начало партий</button>
-  <button id="games-next" type="button" disabled>Следующая страница партий</button>
-  <section id="game-panel" hidden>
-    <h2>Партия</h2>
-    <p>ID: <code data-game-id></code></p>
-    <p data-sides></p>
-    <p data-turn></p>
-    <p data-result role="status"></p>
-    <div data-board aria-label="Игровое поле" style="display: grid; grid-template-columns: repeat(3, 5rem); gap: .25rem;"></div>
-    <h3>Ходы</h3>
-    <ol data-moves style="list-style: none; padding: 0;"></ol>
-    <button data-retry type="button" hidden>Повторить отправку хода</button>
-    <p data-error role="alert"></p>
-  </section>
-  <style>[data-board] button { min-height: 5rem; font-size: 2rem; } [data-board] button:disabled { color: #333; }</style>
+  <header class="page-header">
+    <h1>Мобиус</h1>
+    <p>Крестики-нолики с вариантами Локи.</p>
+  </header>
+  <main class="layout">
+    <div class="sidebar">
+      <section class="panel" aria-label="Состояние сервера">
+        <p id="status" role="status">Проверяем готовность сервера…</p>
+        <div class="actions"><button id="refresh" type="button">Обновить</button></div>
+      </section>
+      <section class="panel">
+        <h2>Варианты Локи</h2>
+        <label class="checkbox-label"><input id="online-only" type="checkbox"> Только подключённые</label>
+        <p id="empty" hidden>Вариантов Локи пока нет.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Имя</th><th>ID</th><th>Состояние</th><th>Последняя связь</th><th>Статистика Локи</th><th></th></tr></thead>
+          <tbody id="loki-list"></tbody>
+        </table></div>
+        <div class="actions">
+          <button id="first" type="button">В начало списка</button>
+          <button id="next" type="button" disabled>Следующая страница</button>
+        </div>
+      </section>
+      <section id="selected" class="panel" hidden>
+        <h2>Пригласить Локи</h2>
+        <p id="selected-name"></p>
+        <div id="selected-statistics"></div>
+        <form id="invite-form">
+          <label>Моя сторона <select id="mobius-side"><option value="X">X — хожу первым</option><option value="O">O — первым ходит Локи</option></select></label>
+          <div class="actions"><button id="invite" type="submit">Пригласить</button></div>
+        </form>
+        <p id="invitation-status" role="status"></p>
+        <p id="invitation-statistics-label">На момент приглашения</p>
+        <div id="invitation-statistics"></div>
+        <p id="active-game"></p>
+        <p id="invite-error" role="alert"></p>
+        <h3>Завершённые партии этого Локи</h3>
+        <p id="history-status" role="status"></p>
+        <ul id="history"></ul>
+        <div class="actions">
+          <button id="history-first" type="button">В начало истории</button>
+          <button id="history-next" type="button" disabled>Следующая страница истории</button>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Незаконченные партии</h2>
+        <ul id="active-games"></ul>
+        <div class="actions">
+          <button id="games-first" type="button">В начало партий</button>
+          <button id="games-next" type="button" disabled>Следующая страница партий</button>
+        </div>
+      </section>
+    </div>
+    <section id="game-panel" class="game-area" hidden>
+      <div class="panel game-details">
+        <h2>Партия</h2>
+        <p>ID: <code data-game-id></code></p>
+        <p data-sides></p>
+        <p data-turn></p>
+        <p data-result role="status"></p>
+        <h3>Ходы</h3>
+        <ol data-moves></ol>
+        <button data-retry type="button" hidden>Повторить отправку хода</button>
+        <p data-error role="alert"></p>
+      </div>
+      <div class="board-panel">
+        <h2>Игровое поле</h2>
+        <div data-board aria-label="Игровое поле"></div>
+      </div>
+    </section>
+  </main>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

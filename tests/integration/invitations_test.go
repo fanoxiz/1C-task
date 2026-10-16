@@ -346,7 +346,7 @@ func TestInvitationStatisticsSnapshotAndRestart(t *testing.T) {
 	a, b, c, d, newbie := f.register(), f.register(), f.register(), f.register(), f.register()
 	f.scores(a.State.Loki.ID, 1, 2)
 	first := decode[protocol.Invitation](t, f.invite(a.State.Loki.ID, f.id(), "X", 200))
-	if first.Statistics.BetterPercent != nil || first.Statistics.Message != "Пока недостаточно данных для сравнения" {
+	if first.Statistics.BetterPercent != nil || first.Statistics.Message != "" {
 		t.Fatal("no eligible opponents handled incorrectly")
 	}
 	f.respond(a.Token, first.ID, "decline", 200)

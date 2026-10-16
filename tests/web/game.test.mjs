@@ -155,3 +155,17 @@ test('unavailable board blocks actions and recovers on a fresh snapshot', () => 
   assert.equal(panel.cells[0].disabled, false);
   assert.equal(root.querySelector('[data-error]').textContent, '');
 });
+
+test('move history names cells spatially and omits delivery metadata', () => {
+  const { panel, root } = setup();
+  panel.render(board('A', [
+    { number: 1, actor: 'mobius', side: 'X', row: 0, column: 2, delivered_at: '2026-01-01T00:00:00Z' },
+    { number: 2, actor: 'loki', side: 'O', row: 2, column: 0, delivered_at: null },
+    { number: 3, actor: 'mobius', side: 'X', row: 1, column: 1, delivered_at: null },
+  ]), true);
+  assert.deepEqual(root.querySelector('[data-moves]').children.map(item => item.textContent), [
+    '1. Мобиус (X): верх, право',
+    '2. Локи (O): низ, лево',
+    '3. Мобиус (X): середина, центр',
+  ]);
+});

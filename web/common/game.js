@@ -1,3 +1,7 @@
+function cellName(row, column) {
+  return `${['верх', 'середина', 'низ'][row]}, ${['лево', 'центр', 'право'][column]}`;
+}
+
 export class GamePanel {
   constructor(root, role, send, refresh) {
     this.root = root;
@@ -62,14 +66,12 @@ export class GamePanel {
     this.cells.forEach((cell, index) => {
       const value = game.board[Math.floor(index / 3)][index % 3];
       cell.textContent = value || ' ';
-      cell.setAttribute('aria-label', `Строка ${Math.floor(index / 3) + 1}, столбец ${index % 3 + 1}: ${value || 'пусто'}`);
+      cell.setAttribute('aria-label', `${cellName(Math.floor(index / 3), index % 3)}: ${value || 'пусто'}`);
       cell.disabled = blocked || !!value;
     });
     const history = game.moves.map(move => {
       const item = document.createElement('li');
-      let delivery = '';
-      if (this.role === 'mobius' && move.actor === 'mobius') delivery = move.delivered_at ? ' — доставлено' : ' — ожидает подтверждения';
-      item.textContent = `${move.number}. ${move.actor === 'mobius' ? 'Мобиус' : 'Локи'} (${move.side}): ${move.row + 1}, ${move.column + 1}${delivery}`;
+      item.textContent = `${move.number}. ${move.actor === 'mobius' ? 'Мобиус' : 'Локи'} (${move.side}): ${cellName(move.row, move.column)}`;
       return item;
     });
     this.root.querySelector('[data-moves]').replaceChildren(...history);

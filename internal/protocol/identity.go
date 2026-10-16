@@ -38,6 +38,8 @@ type LokiStatus struct {
 
 type Score struct {
 	Wins    int64    `json:"wins"`
+	Draws   int64    `json:"draws"`
+	Losses  int64    `json:"losses"`
 	Played  int64    `json:"played"`
 	WinRate *float64 `json:"win_rate"`
 }

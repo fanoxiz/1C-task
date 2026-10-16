@@ -8,11 +8,15 @@ import (
 )
 
 type Statistics struct {
-	Wins          int64    `json:"wins"`
-	Played        int64    `json:"played"`
-	WinRate       *float64 `json:"win_rate"`
-	BetterPercent *int     `json:"better_percent"`
-	Message       string   `json:"message"`
+	Wins int64 `json:"wins"`
+	// Old invitation snapshots have no draw/loss counts; preserve them as unknown.
+	Draws               *int64   `json:"draws"`
+	Losses              *int64   `json:"losses"`
+	Played              int64    `json:"played"`
+	WinRate             *float64 `json:"win_rate"`
+	BetterPercent       *int     `json:"better_percent"`       // Other Loki with a strictly higher win rate.
+	OutperformedPercent *int     `json:"outperformed_percent"` // Other Loki with a strictly lower win rate.
+	Message             string   `json:"message"`
 }
 
 type Invitation struct {

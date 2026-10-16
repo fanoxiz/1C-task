@@ -44,7 +44,7 @@ func TestLiveStatisticsFromPlayedGamesAndFixedInvitation(t *testing.T) {
 	}
 	xWin, draw := []int{0, 3, 1, 4, 2}, []int{0, 1, 2, 4, 3, 5, 7, 6, 8}
 	win := f.finish(a, "O", xWin)
-	if score := f.state(a.Token).Statistics; score.BetterPercent != nil || score.Message != "Пока недостаточно данных для сравнения" {
+	if score := f.state(a.Token).Statistics; score.BetterPercent != nil || score.Message != "" {
 		t.Fatalf("unplayed opponents included: %+v", score)
 	}
 	f.finish(a, "X", xWin)

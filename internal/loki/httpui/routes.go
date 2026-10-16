@@ -16,6 +16,8 @@ func Handler(connection *client.Client) http.Handler {
 	mux.Handle("GET /app.js", web.Handler("loki"))
 	mux.Handle("GET /game.js", web.Handler("common"))
 	mux.Handle("GET /statistics.js", web.Handler("common"))
+	mux.Handle("GET /statistics.css", web.Handler("common"))
+	mux.Handle("GET /layout.css", web.Handler("common"))
 	mux.HandleFunc("GET /api/v1/state", func(w http.ResponseWriter, r *http.Request) {
 		httpjson.Write(w, http.StatusOK, connection.State())
 	})

@@ -1,5 +1,5 @@
 import { GamePanel, moveBody, moveResponse } from '/game.js';
-import { scoreText } from '/statistics.js';
+import { renderStatistics } from '/statistics.js';
 
 const status = document.querySelector('#status');
 const button = document.querySelector('#refresh');
@@ -100,7 +100,7 @@ function renderSelected() {
   document.querySelector('#selected').hidden = !selected;
   if (!selected) return;
   document.querySelector('#selected-name').textContent = `${selected.display_name} (${selected.id})`;
-  document.querySelector('#selected-statistics').textContent = scoreText(selected.statistics);
+  renderStatistics(document.querySelector('#selected-statistics'), selected.statistics);
   const invitation = selected.invitation;
   const labels = { pending: 'Ожидает ответа', accepted: 'Принято', declined: 'Отклонено', expired: 'Время ответа истекло', cancelled: 'Отменено' };
   let text = invitation ? labels[invitation.status] : 'Приглашений ещё нет.';
@@ -109,8 +109,8 @@ function renderSelected() {
     text += ` — осталось ${seconds} сек.`;
   }
   document.querySelector('#invitation-status').textContent = text;
-  document.querySelector('#invitation-statistics').textContent = invitation
-    ? `На момент приглашения: ${scoreText(invitation.statistics_snapshot)} ${invitation.statistics_snapshot.message}` : '';
+  document.querySelector('#invitation-statistics-label').hidden = !invitation;
+  renderStatistics(document.querySelector('#invitation-statistics'), invitation?.statistics_snapshot);
   document.querySelector('#active-game').textContent = selected.game
     ? `Партия ${selected.game.id}. Мобиус: ${selected.game.mobius_side}, Локи: ${selected.game.loki_side}. Ходит ${selected.game.next_actor === 'mobius' ? 'Мобиус' : 'Локи'}.`
     : (invitation?.status === 'accepted' ? (invitation.game_id ? 'Партия завершена.' : 'Незаконченная партия удалена.') : '');
@@ -122,7 +122,6 @@ function renderSelected() {
 async function refresh() {
   if (pending) return;
   pending = true;
-  button.disabled = true;
   try {
     const response = await fetch('/readyz', { cache: 'no-store', signal: AbortSignal.timeout(4000) });
     available = response.ok;
@@ -135,11 +134,15 @@ async function refresh() {
     serverOffset = Date.parse(list.server_time) - Date.now();
     const rows = list.items.map((loki) => {
       const row = document.createElement('tr');
-      for (const text of [loki.display_name, loki.id, loki.connected ? 'Подключён' : 'Отключён', loki.last_seen_at ? new Date(loki.last_seen_at).toLocaleString() : '—', scoreText(loki.statistics)]) {
+      for (const text of [loki.display_name, loki.id.slice(0, 6), loki.connected ? 'Подключён' : 'Отключён', loki.last_seen_at ? new Date(loki.last_seen_at).toLocaleString() : '—']) {
         const cell = document.createElement('td');
         cell.textContent = text;
         row.append(cell);
       }
+      row.children[1].title = loki.id;
+      const statistics = document.createElement('td');
+      renderStatistics(statistics, loki.statistics);
+      row.append(statistics);
       const controls = document.createElement('td');
       const select = document.createElement('button');
       select.type = 'button';
@@ -181,7 +184,6 @@ async function refresh() {
     gamePanel.render(gamePanel.game, false);
     renderSelected();
   } finally {
-    button.disabled = false;
     pending = false;
   }
 }
